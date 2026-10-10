@@ -1,0 +1,16 @@
+name: Validate remote content
+on:
+  push:
+    paths: ['remote/**', 'remote_dev/**', 'tools/validate_remote_content.py', '.github/workflows/remote-content.yml']
+  pull_request:
+    paths: ['remote/**', 'remote_dev/**', 'tools/validate_remote_content.py', '.github/workflows/remote-content.yml']
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tools/validate_remote_content.py
+      - run: python3 tools/validate_remote_content.py remote_dev
