@@ -72,6 +72,5 @@ struct TimerWidget: Widget {
             TimerWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("타이머 위젯")
-        .description("실시간 타이머 잔여 시간을 표시합니다.")
     }
 }
