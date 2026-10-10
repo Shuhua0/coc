@@ -12,31 +12,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Xcode 프로젝트 빌드 및 아카이브 (.app 생성)
-      # 프로젝트에 맞는 .xcodeproj 또는 .xcworkspace 이름으로 수정해주세요. (현재 구조상 clash_widgets.xcodeproj)
-      - name: Build Xcode Archive
+      - name: Build Xcode Archive (Simulator)
         run: |
           xcodebuild -project clash_widgets.xcodeproj \
                      -scheme clash_widgets \
                      -configuration Release \
-                     -sdk iphoneos \
+                     -sdk iphonesimulator \
                      -derivedDataPath build \
-                     clean archive -archivePath build/clash_widgets.xcarchive
+                     archive -archivePath build/clash_widgets.xcarchive
 
-      # 2. Payload 폴더를 만들고 .app 결과물 포장하기
       - name: Package IPA
         run: |
           mkdir -p output/Payload
-          # 빌드된 .app 파일을 Payload 폴더 안으로 복사
-          cp -r build/Products/Release-iphoneos/*.app output/Payload/
+          echo "--- 빌드 폴더 뒤지는 중 ---"
+          # 시뮬레이터 빌드의 경우 Products/Release-iphonesimulator 경로에 .app이 생성됩니다.
+          cp -r build/Products/Release-iphonesimulator/*.app output/Payload/
           
           cd output
+          # 내용물이 있는지 확인
           ls -R Payload
           zip -r clash-widgets.ipa Payload
           echo "--- 최종 IPA 용량 확인 ---"
           ls -lh clash-widgets.ipa
 
-      # 3. 아티팩트 업로드
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
