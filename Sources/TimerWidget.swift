@@ -23,7 +23,7 @@ struct Provider: TimelineProvider {
     }
     
     func getEndDate() -> Date {
-        let defaults = UserDefaults(suiteName: "group.com.yourname.mytimer")
+        let defaults = UserDefaults(suiteName: "group.com.mytimer.app")
         let timeInterval = defaults?.double(forKey: "timerEndDate") ?? 0
         if timeInterval > 0 {
             return Date(timeIntervalSince1970: timeInterval)

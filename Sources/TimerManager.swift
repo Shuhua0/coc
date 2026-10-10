@@ -4,7 +4,7 @@ import UserNotifications
 class TimerManager: ObservableObject {
     static let shared = TimerManager()
     
-    let userDefaults = UserDefaults(suiteName: "group.com.yourname.mytimer")
+    let userDefaults = UserDefaults(suiteName: "group.com.mytimer.app")
     
     @Published var remainingSeconds: Int {
         didSet {
