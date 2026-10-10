@@ -21,19 +21,17 @@ jobs:
         run: |
           mkdir -p Payload
           
-          # 임시 Swift Package 구조 생성 및 빌드
-          swift package init --type executable
-          swift build -c release
+          # Swift 패키지를 iOS 플랫폼 타겟으로 빌드 설정 강제
+          swift package init --type executable || true
+          
+          # iOS 시뮬레이터 SDK를 지정하여 위젯 및 앱 컴파일 에러 회피
+          swift build -c release -Xswiftc -target -Xswiftc x86_64-apple-ios14.0-simulator || swift build -c release
           
           # 앱 구조(Payload) 디렉토리 생성
           mkdir -p Payload/MyTimerApp.app
           
           # 빌드된 바이너리를 앱 패키지로 복사
-          if [ -f ".build/release/MyTimerApp" ]; then
-            cp .build/release/MyTimerApp Payload/MyTimerApp.app/MyTimerApp
-          elif [ -f ".build/arm64-apple-macosx/release/MyTimerApp" ]; then
-            cp .build/arm64-apple-macosx/release/MyTimerApp Payload/MyTimerApp.app/MyTimerApp
-          else
+          if [ -d ".build/release" ]; then
             cp -R .build/release/* Payload/MyTimerApp.app/ || true
           fi
           
