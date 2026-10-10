@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 
+@available(iOS 14.0, macOS 11.0, *)
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
         SimpleEntry(date: Date(), endDate: Date().addingTimeInterval(60))
@@ -32,11 +33,13 @@ struct Provider: TimelineProvider {
     }
 }
 
+@available(iOS 14.0, macOS 11.0, *)
 struct SimpleEntry: TimelineEntry {
     let date: Date
     let endDate: Date
 }
 
+@available(iOS 14.0, macOS 11.0, *)
 struct TimerWidgetEntryView : View {
     var entry: Provider.Entry
 
@@ -59,7 +62,9 @@ struct TimerWidgetEntryView : View {
                     .foregroundColor(.green)
             }
         }
-        .containerBackground(.fill.background, for: .widget)
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
     }
 }
 
