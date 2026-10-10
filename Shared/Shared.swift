@@ -1,11 +1,14 @@
 import Foundation
 
 enum Shared {
-    static let fallbackGroup = "group.com.example.timertest"
-
-    // SideStore가 앱 그룹 ID를 바꿔 넣을 수 있어서 Info.plist의 ALTAppGroups를 우선 사용
     static var groupID: String {
-        (Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String])?.first ?? fallbackGroup
+        if let g = (Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String])?.first {
+            return g
+        }
+        // 위젯 번들 ID(...widget[.TEAMID])에서 ".widget"만 빼면 앱 번들 ID와 같아짐
+        let id = (Bundle.main.bundleIdentifier ?? "com.example.timertest")
+            .replacingOccurrences(of: ".widget", with: "")
+        return "group." + id
     }
 
     static var defaults: UserDefaults {
