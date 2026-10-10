@@ -22,8 +22,10 @@ struct Provider: TimelineProvider {
             let entries = [TimerEntry(date: now, end: end), TimerEntry(date: end, end: nil)]
             completion(Timeline(entries: entries, policy: .never))
         } else {
-            completion(Timeline(entries: [TimerEntry(date: now, end: nil)], policy: .never))
-        }
+    VStack(spacing: 4) {
+        Text("대기 중").font(.headline).foregroundStyle(.secondary)
+        Text(Shared.groupID).font(.system(size: 8))
+        Text("\(String(describing: Shared.endDate))").font(.system(size: 8))
     }
 }
 
