@@ -12,8 +12,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Xcode Archive (Device Architecture, No Sign)
+      - name: Build Xcode Archive (With Entitlements, No Sign)
         run: |
+          # 프로젝트 내 entitlements 파일 경로를 지정하여 권한이 유실되지 않게 합니다.
+          # 만약 파일 이름이나 경로가 다르다면 수정해주세요.
           xcodebuild -project clash_widgets.xcodeproj \
                      -scheme clash_widgets \
                      -configuration Release \
@@ -28,8 +30,6 @@ jobs:
         run: |
           mkdir -p output/Payload
           echo "--- 빌드 폴더 내 .app 파일 찾는 중 ---"
-          
-          # 빌드 결과물(.app)을 찾아 Payload 폴더 안으로 복사
           find build -name "*.app" -type d -exec cp -r {} output/Payload/ \;
           
           cd output
