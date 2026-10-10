@@ -12,12 +12,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Xcode Archive (Simulator)
+      - name: Build Xcode Archive (Device Architecture, No Sign)
         run: |
           xcodebuild -project clash_widgets.xcodeproj \
                      -scheme clash_widgets \
                      -configuration Release \
-                     -sdk iphonesimulator \
+                     -sdk iphoneos \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
                      -derivedDataPath build \
                      archive -archivePath build/clash_widgets.xcarchive
 
@@ -26,11 +29,10 @@ jobs:
           mkdir -p output/Payload
           echo "--- 빌드 폴더 내 .app 파일 찾는 중 ---"
           
-          # build 폴더 전체에서 확장자가 .app인 디렉토리를 찾아 Payload 안으로 복사합니다.
+          # 빌드 결과물(.app)을 찾아 Payload 폴더 안으로 복사
           find build -name "*.app" -type d -exec cp -r {} output/Payload/ \;
           
           cd output
-          # 내용물이 복사되었는지 확인
           ls -R Payload
           zip -r clash-widgets.ipa Payload
           echo "--- 최종 IPA 용량 확인 ---"
