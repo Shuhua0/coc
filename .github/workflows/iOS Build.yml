@@ -12,35 +12,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+      # 1. Xcode 프로젝트 빌드 및 아카이브 (.app 생성)
+      # 프로젝트에 맞는 .xcodeproj 또는 .xcworkspace 이름으로 수정해주세요. (현재 구조상 clash_widgets.xcodeproj)
+      - name: Build Xcode Archive
+        run: |
+          xcodebuild -project clash_widgets.xcodeproj \
+                     -scheme clash_widgets \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -derivedDataPath build \
+                     clean archive -archivePath build/clash_widgets.xcarchive
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Archive
-        # install 대신 archive 명령어를 사용하여 결과물을 물리적으로 생성하게 합니다.
-        run: ./gradlew ios:robovmArchive
-
+      # 2. Payload 폴더를 만들고 .app 결과물 포장하기
       - name: Package IPA
         run: |
           mkdir -p output/Payload
-          echo "--- 빌드 폴더 뒤지는 중 ---"
-          # 빌드된 결과물(.app)을 찾아서 Payload로 복사
-          find ios/build/robovm -name "*.app" -type d -exec cp -r {} output/Payload/ \;
+          # 빌드된 .app 파일을 Payload 폴더 안으로 복사
+          cp -r build/Products/Release-iphoneos/*.app output/Payload/
           
           cd output
-          # 내용물이 있는지 확인
           ls -R Payload
-          zip -r shattered-pd.ipa Payload
+          zip -r clash-widgets.ipa Payload
           echo "--- 최종 IPA 용량 확인 ---"
-          ls -lh shattered-pd.ipa
+          ls -lh clash-widgets.ipa
 
+      # 3. 아티팩트 업로드
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Shattered-PD-IPA
-          path: output/shattered-pd.ipa
+          name: Clash-Widgets-IPA
+          path: output/clash-widgets.ipa
