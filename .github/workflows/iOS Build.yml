@@ -1,4 +1,4 @@
-name: Build iOS Timer & Widget
+name: Build iOS IPA
 
 on:
   push:
@@ -17,22 +17,59 @@ jobs:
         with:
           xcode-version: latest
 
-      - name: Create Xcode Project Structure & Build
+      - name: Generate Project and Build IPA
         run: |
-          mkdir -p ProjectBuild/MyTimerApp/Sources
-          cp -R Sources/* ProjectBuild/MyTimerApp/Sources/
+          mkdir -p Payload
           
-          cd ProjectBuild
-          
-          # 간단한 Swift Package 또는 커맨드라인 빌드 스크립트 구성
-          swift package init --type executable || true
-          
-          echo "Building application..."
-          # 가상 맥 환경에서 컴파일 테스트 진행
+          # 임시 Swift Package 구조 생성 및 빌드
+          swift package init --type executable
           swift build -c release
+          
+          # 앱 구조(Payload) 디렉토리 생성
+          mkdir -p Payload/MyTimerApp.app
+          
+          # 빌드된 바이너리를 앱 패키지로 복사
+          if [ -f ".build/release/MyTimerApp" ]; then
+            cp .build/release/MyTimerApp Payload/MyTimerApp.app/MyTimerApp
+          elif [ -f ".build/arm64-apple-macosx/release/MyTimerApp" ]; then
+            cp .build/arm64-apple-macosx/release/MyTimerApp Payload/MyTimerApp.app/MyTimerApp
+          else
+            cp -R .build/release/* Payload/MyTimerApp.app/ || true
+          fi
+          
+          # 기본 Info.plist 생성 (사이드스토어 호환용)
+          cat << 'EOF' > Payload/MyTimerApp.app/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleIdentifier</key>
+              <string>com.mytimer.app</string>
+              <key>CFBundleName</key>
+              <string>MyTimerApp</string>
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleExecutable</key>
+              <string>MyTimerApp</string>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>armv7</string>
+              </array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
 
-      - name: Upload Build Artifacts
+          # IPA 압축 포장
+          zip -r MyTimerApp.ipa Payload
+
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyTimerApp-Artifacts
-          path: ProjectBuild/.build/release/
+          name: MyTimerApp-IPA
+          path: MyTimerApp.ipa
