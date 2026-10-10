@@ -24,12 +24,13 @@ jobs:
       - name: Package IPA
         run: |
           mkdir -p output/Payload
-          echo "--- 빌드 폴더 뒤지는 중 ---"
-          # 시뮬레이터 빌드의 경우 Products/Release-iphonesimulator 경로에 .app이 생성됩니다.
-          cp -r build/Products/Release-iphonesimulator/*.app output/Payload/
+          echo "--- 빌드 폴더 내 .app 파일 찾는 중 ---"
+          
+          # build 폴더 전체에서 확장자가 .app인 디렉토리를 찾아 Payload 안으로 복사합니다.
+          find build -name "*.app" -type d -exec cp -r {} output/Payload/ \;
           
           cd output
-          # 내용물이 있는지 확인
+          # 내용물이 복사되었는지 확인
           ls -R Payload
           zip -r clash-widgets.ipa Payload
           echo "--- 최종 IPA 용량 확인 ---"
