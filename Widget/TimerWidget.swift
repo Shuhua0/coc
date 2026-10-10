@@ -18,14 +18,11 @@ struct Provider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<TimerEntry>) -> Void) {
         let now = Date()
         if let end = Shared.endDate, end > now {
-            // 카운트다운 중 + 종료 시점에 "대기 중"으로 전환
             let entries = [TimerEntry(date: now, end: end), TimerEntry(date: end, end: nil)]
             completion(Timeline(entries: entries, policy: .never))
         } else {
-    VStack(spacing: 4) {
-        Text("대기 중").font(.headline).foregroundStyle(.secondary)
-        Text(Shared.groupID).font(.system(size: 8))
-        Text("\(String(describing: Shared.endDate))").font(.system(size: 8))
+            completion(Timeline(entries: [TimerEntry(date: now, end: nil)], policy: .never))
+        }
     }
 }
 
@@ -33,15 +30,16 @@ struct WidgetView: View {
     let entry: TimerEntry
 
     var body: some View {
-        Group {
+        VStack(spacing: 4) {
             if let end = entry.end {
-                // 초 단위 갱신은 시스템이 직접 처리 (타임라인 리로드 불필요)
                 Text(timerInterval: entry.date...end, countsDown: true)
                     .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
                     .multilineTextAlignment(.center)
             } else {
                 Text("대기 중").font(.headline).foregroundStyle(.secondary)
             }
+            Text(Shared.groupID).font(.system(size: 8))
+            Text(String(describing: Shared.endDate)).font(.system(size: 8))
         }
         .containerBackground(.fill.tertiary, for: .widget)
     }
