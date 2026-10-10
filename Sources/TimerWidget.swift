@@ -63,8 +63,6 @@ struct TimerWidgetEntryView : View {
     }
 }
 
-@available(iOS 14.0, *)
-@main
 struct TimerWidget: Widget {
     let kind: String = "TimerWidget"
 
