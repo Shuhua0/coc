@@ -14,7 +14,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 28) {
             if let end, end > .now {
-                Text(timerInterval: Date.now...end, countdown: true)
+                Text(timerInterval: Date.now...end, countsDown: true)
                     .font(.system(size: 64, weight: .bold, design: .rounded).monospacedDigit())
                     .multilineTextAlignment(.center)
                 Button("취소", role: .destructive) { update(nil) }

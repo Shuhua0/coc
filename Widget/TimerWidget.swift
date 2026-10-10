@@ -34,7 +34,7 @@ struct WidgetView: View {
         Group {
             if let end = entry.end {
                 // 초 단위 갱신은 시스템이 직접 처리 (타임라인 리로드 불필요)
-                Text(timerInterval: entry.date...end, countdown: true)
+                Text(timerInterval: entry.date...end, countsDown: true)
                     .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
                     .multilineTextAlignment(.center)
             } else {
