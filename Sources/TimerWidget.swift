@@ -71,6 +71,5 @@ struct TimerWidget: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             TimerWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("타이머 위젯")
     }
 }
