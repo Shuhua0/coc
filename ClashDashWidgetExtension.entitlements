@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.Zachary-Buschmann.clash-widgets</string>
+		<string>group.my.clashwidgets</string>
 	</array>
 </dict>
 </plist>
