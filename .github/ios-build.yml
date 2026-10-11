@@ -1,0 +1,59 @@
+name: iOS build (SideStore)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Apply SideStore fixes
+        run: |
+          git apply sidestore-fix.patch
+          python3 fix_asset_names.py clash_widgets/Assets.xcassets
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild -project clash_widgets.xcodeproj -scheme clash_widgets \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Fake-sign with App Group entitlements and package ipa
+        run: |
+          brew install ldid
+
+          APP=$(find build/Build/Products -type d -name "Clashboard.app" -path "*Release-iphoneos*" | head -1)
+          APPEX=$(find "$APP/PlugIns" -type d -name "*.appex" | head -1)
+          APP_EXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Info.plist")
+          APPEX_EXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APPEX/Info.plist")
+
+          cat > ents.plist <<'PL'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>com.apple.security.application-groups</key>
+            <array><string>group.Zachary-Buschmann.clash-widgets</string></array>
+          </dict></plist>
+          PL
+
+          ldid -Sents.plist "$APP/$APP_EXE"
+          ldid -Sents.plist "$APPEX/$APPEX_EXE"
+
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry Clashboard.ipa Payload
+
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clashboard-ipa
+          path: Clashboard.ipa

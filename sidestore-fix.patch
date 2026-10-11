@@ -1,0 +1,303 @@
+diff -ruN -x '*.png' a/ClashDashWidget/ClashDashWidget.swift b/ClashDashWidget/ClashDashWidget.swift
+--- a/ClashDashWidget/ClashDashWidget.swift	2026-10-11 18:41:34.847589488 +0000
++++ b/ClashDashWidget/ClashDashWidget.swift	2026-10-11 18:41:34.896580740 +0000
+@@ -161,7 +161,7 @@
+     var selectedProfile: ProfileEntity?
+     
+     func perform() async throws -> some IntentResult {
+-        let appGroup = "group.Zachary-Buschmann.clash-widgets"
++        let appGroup = PersistentStore.appGroupIdentifier
+         if let defaults = UserDefaults(suiteName: appGroup) {
+             if let profile = selectedProfile, !profile.isAutomatic {
+                 // Save the selected profile UUID
+@@ -216,7 +216,7 @@
+     static var openAppWhenRun: Bool = true
+ 
+     func perform() async throws -> some IntentResult {
+-        let appGroup = "group.Zachary-Buschmann.clash-widgets"
++        let appGroup = PersistentStore.appGroupIdentifier
+         if let defaults = UserDefaults(suiteName: appGroup) {
+             defaults.set(true, forKey: "widget_import_requested")
+         }
+@@ -257,7 +257,7 @@
+     typealias Intent = WidgetProfileIntent
+     typealias Entry = SimpleEntry
+     
+-    let appGroup = "group.Zachary-Buschmann.clash-widgets"
++    let appGroup = PersistentStore.appGroupIdentifier
+ 
+     func placeholder(in context: Context) -> SimpleEntry {
+         SimpleEntry(date: Date(), upgrades: [], builderCount: 5, totalBuilderUpgradesCount: 0, goldPassBoost: 0, debugText: "Placeholder")
+@@ -331,7 +331,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -356,7 +356,7 @@
+             return (prioritized(upgrades: activeUpgrades, builderCount: count), count, boost, activeBoosts, totalBuilderUpgradesCount)
+         }
+ 
+-        let appGroup = "group.Zachary-Buschmann.clash-widgets"
++        let appGroup = PersistentStore.appGroupIdentifier
+         let sharedDefaults = UserDefaults(suiteName: appGroup)
+         guard let data = sharedDefaults?.data(forKey: "saved_upgrades"),
+                     let decoded = try? JSONDecoder().decode([BuildingUpgrade].self, from: data) else {
+@@ -381,7 +381,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -404,7 +404,7 @@
+             }
+             return "Clashboard"
+         }
+-        let appGroup = "group.Zachary-Buschmann.clash-widgets"
++        let appGroup = PersistentStore.appGroupIdentifier
+         let sharedDefaults = UserDefaults(suiteName: appGroup)
+         return sharedDefaults?.string(forKey: "widget_simple_text") ?? "No dash data"
+     }
+@@ -422,7 +422,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -702,7 +702,7 @@
+            let profileID = selectedProfile.profileID() {
+             selectedProfileID = profileID
+         } else {
+-            let appGroup = "group.Zachary-Buschmann.clash-widgets"
++            let appGroup = PersistentStore.appGroupIdentifier
+             if let defaults = UserDefaults(suiteName: appGroup),
+                let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -732,7 +732,7 @@
+            let profileID = selectedProfile.profileID() {
+             selectedProfileID = profileID
+         } else {
+-            let appGroup = "group.Zachary-Buschmann.clash-widgets"
++            let appGroup = PersistentStore.appGroupIdentifier
+             if let defaults = UserDefaults(suiteName: appGroup),
+                let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -901,7 +901,7 @@
+     }
+ 
+     private func loadWar(for configuration: WidgetProfileIntent) -> WarDetails? {
+-        let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++        let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+         
+         // Get the profile ID to load war data for
+         let profileID: UUID? = {
+@@ -1294,7 +1294,7 @@
+     typealias Intent = WidgetProfileIntent
+     typealias Entry = SimpleEntry
+     
+-    let appGroup = "group.Zachary-Buschmann.clash-widgets"
++    let appGroup = PersistentStore.appGroupIdentifier
+ 
+     func placeholder(in context: Context) -> SimpleEntry {
+         SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "LabPet")
+@@ -1331,7 +1331,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -1382,7 +1382,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -1443,7 +1443,7 @@
+     typealias Intent = WidgetProfileIntent
+     typealias Entry = HelperCooldownWidgetEntry
+     
+-    let appGroup = "group.Zachary-Buschmann.clash-widgets"
++    let appGroup = PersistentStore.appGroupIdentifier
+ 
+     func placeholder(in context: Context) -> HelperCooldownWidgetEntry {
+         HelperCooldownWidgetEntry(date: Date(), helpers: placeholderHelpers(), profileName: "")
+@@ -1489,7 +1489,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -1749,7 +1749,7 @@
+     }
+ 
+     private func loadWarData(for configuration: WidgetProfileIntent) -> (war: WarDetails?, isInCWL: Bool) {
+-        let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++        let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+         guard let state = PersistentStore.loadState() else { return (nil, false) }
+         
+         // Determine which profile to use
+@@ -1811,7 +1811,7 @@
+             profileToUse = state.profiles.first(where: { $0.id == profileID })
+         } else {
+             // If no profile selected, try to read from UserDefaults (saved preference)
+-            let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++            let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+             if let savedSelection = defaults?.string(forKey: "widget_profile_selection"),
+                let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+                 profileToUse = state.profiles.first(where: { $0.id == profileID })
+@@ -2278,7 +2278,7 @@
+     typealias Intent = WidgetProfileIntent
+     typealias Entry = SimpleEntry
+     
+-    let appGroup = "group.Zachary-Buschmann.clash-widgets"
++    let appGroup = PersistentStore.appGroupIdentifier
+ 
+     func placeholder(in context: Context) -> SimpleEntry {
+         SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "BuilderBase")
+@@ -2337,7 +2337,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+@@ -2383,7 +2383,7 @@
+                 selectedProfileID = profileID
+             } else {
+                 // If no profile selected, try to read from UserDefaults (saved preference)
+-                let appGroup = "group.Zachary-Buschmann.clash-widgets"
++                let appGroup = PersistentStore.appGroupIdentifier
+                 if let defaults = UserDefaults(suiteName: appGroup),
+                    let savedSelection = defaults.string(forKey: "widget_profile_selection"),
+                    let profileID = ProfileEntity.resolveProfileID(from: savedSelection) {
+diff -ruN -x '*.png' a/clash_widgets/ContentView/ContentView.swift b/clash_widgets/ContentView/ContentView.swift
+--- a/clash_widgets/ContentView/ContentView.swift	2026-10-11 18:41:34.888452853 +0000
++++ b/clash_widgets/ContentView/ContentView.swift	2026-10-11 18:41:34.952714401 +0000
+@@ -596,7 +596,7 @@
+     private let baseURL: URL?
+ 
+     private init() {
+-        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.Zachary-Buschmann.clash-widgets") {
++        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: PersistentStore.appGroupIdentifier) {
+             let dir = container.appendingPathComponent("clan_badges", isDirectory: true)
+             if !FileManager.default.fileExists(atPath: dir.path) {
+                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+diff -ruN -x '*.png' a/clash_widgets/DataService.swift b/clash_widgets/DataService.swift
+--- a/clash_widgets/DataService.swift	2026-10-11 18:41:34.889223164 +0000
++++ b/clash_widgets/DataService.swift	2026-10-11 18:41:34.953180524 +0000
+@@ -8,7 +8,7 @@
+ }
+ 
+ class DataService: ObservableObject {
+-    static let appGroup = "group.Zachary-Buschmann.clash-widgets"
++    static let appGroup = PersistentStore.appGroupIdentifier
+     private static let helperCooldownDurationSeconds: TimeInterval = 23 * 60 * 60
+ 
+     private static let apiDailyLimit = 1000
+@@ -1287,7 +1287,7 @@
+                     self.saveWarToCache(data: data)
+                     
+                     // Clear CWL flag since we found a regular war
+-                    let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++                    let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+                     defaults?.set(false, forKey: "is_in_cwl")
+                     defaults?.synchronize()
+                     
+@@ -1383,7 +1383,7 @@
+                     self.warStatusMessage = "Currently in Clan War League"
+                     
+                     // Save CWL status to shared defaults for this profile
+-                    let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++                    let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+                     if let profile = self.currentProfile {
+                         defaults?.set(true, forKey: "is_in_cwl_\(profile.tag)")
+                     } else {
+@@ -1398,7 +1398,7 @@
+                     self.currentWar = nil
+                     self.warStatusMessage = "Currently in Clan War League"
+                     
+-                    let defaults = UserDefaults(suiteName: "group.Zachary-Buschmann.clash-widgets")
++                    let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier)
+                     if let profile = self.currentProfile {
+                         defaults?.set(true, forKey: "is_in_cwl_\(profile.tag)")
+                     } else {
+diff -ruN -x '*.png' a/clash_widgets/PersistentStore.swift b/clash_widgets/PersistentStore.swift
+--- a/clash_widgets/PersistentStore.swift	2026-10-11 18:41:34.889336640 +0000
++++ b/clash_widgets/PersistentStore.swift	2026-10-11 18:41:34.953792950 +0000
+@@ -1,7 +1,35 @@
+ import Foundation
+ 
+ struct PersistentStore {
+-    static let appGroupIdentifier = "group.Zachary-Buschmann.clash-widgets"
++    /// 원 개발자의 App Group (정식 서명 빌드에서만 그대로 유지됨)
++    static let defaultAppGroupIdentifier = "group.Zachary-Buschmann.clash-widgets"
++
++    /// SideStore/AltStore로 재서명하면 App Group 이름이 바뀌므로, 실행 중에 실제 값을 찾아서 사용
++    static let appGroupIdentifier: String = resolveAppGroupIdentifier()
++
++    private static func resolveAppGroupIdentifier() -> String {
++        // 1) SideStore/AltStore가 Info.plist에 넣어주는 실제 App Group 이름
++        if let groups = Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String],
++           let first = groups.first(where: { !$0.isEmpty }) {
++            return first
++        }
++        // 2) 임베디드 프로비저닝 프로파일의 entitlements에서 읽기
++        if let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
++           let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
++           let start = data.range(of: Data("<?xml".utf8)),
++           let end = data.range(of: Data("</plist>".utf8)),
++           start.lowerBound < end.upperBound {
++            let plistData = data.subdata(in: start.lowerBound..<end.upperBound)
++            if let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],
++               let entitlements = plist["Entitlements"] as? [String: Any],
++               let groups = entitlements["com.apple.security.application-groups"] as? [String],
++               let first = groups.first(where: { !$0.isEmpty }) {
++                return first
++            }
++        }
++        // 3) 기본값
++        return defaultAppGroupIdentifier
++    }
+     private static let directoryName = "ClashboardData"
+     private static let fileName = "app_state.json"
+ 
+diff -ruN -x '*.png' a/clash_widgets/WidgetProfileIntent.swift b/clash_widgets/WidgetProfileIntent.swift
+--- a/clash_widgets/WidgetProfileIntent.swift	2026-10-11 18:41:34.889409488 +0000
++++ b/clash_widgets/WidgetProfileIntent.swift	2026-10-11 18:41:34.953907339 +0000
+@@ -19,14 +19,14 @@
+     func perform() async throws -> some IntentResult {
+         if let profile = selectedProfile {
+             // Save to shared UserDefaults
+-            let appGroup = "group.Zachary-Buschmann.clash-widgets"
++            let appGroup = PersistentStore.appGroupIdentifier
+             if let defaults = UserDefaults(suiteName: appGroup) {
+                 defaults.set(profile.id.uuidString, forKey: "widget_profile_id")
+                 WidgetCenter.shared.reloadAllTimelines()
+             }
+         } else {
+             // Clear profile selection (use automatic)
+-            let appGroup = "group.Zachary-Buschmann.clash-widgets"
++            let appGroup = PersistentStore.appGroupIdentifier
+             if let defaults = UserDefaults(suiteName: appGroup) {
+                 defaults.removeObject(forKey: "widget_profile_id")
+                 WidgetCenter.shared.reloadAllTimelines()
