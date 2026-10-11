@@ -159,6 +159,13 @@ class DataService: ObservableObject {
             persistChanges(reloadWidgets: false)
         }
     }
+    @Published var widgetTapRefresh: Bool = true {
+        didSet {
+            guard !suppressPersistence else { return }
+            updateCurrentProfile { $0.widgetTapRefresh = widgetTapRefresh }
+            persistChanges(reloadWidgets: true)
+        }
+    }
     @Published var hiddenEquipmentNames: Set<String> = [] {
         didSet {
             guard !suppressPersistence else { return }

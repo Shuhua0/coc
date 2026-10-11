@@ -592,6 +592,15 @@ struct ProfileDetailView: View {
                     LevelSliderRow(title: "Alchemist", value: $dataService.alchemistLevel, maxLevel: alchemistMaxLevel, iconName: "profile/alchemist")
                 }
 
+                Toggle(isOn: $dataService.widgetTapRefresh) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tap widget to refresh")
+                        Text("When on, tapping a widget refreshes it instead of opening the app.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 if townHallLevel >= 7 {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {

@@ -225,6 +225,61 @@ struct ImportClipboardIntent: AppIntent {
     }
 }
 
+// MARK: - Tap to Refresh
+// Per-profile setting (Profile Settings > "Tap widget to refresh").
+// ON  -> tapping a widget reloads its timeline in place (no app launch).
+// OFF -> tapping opens the app (previous behavior).
+struct RefreshWidgetIntent: AppIntent {
+    static let title: LocalizedStringResource = "Refresh Widget"
+    static var openAppWhenRun: Bool = false
+
+    func perform() async throws -> some IntentResult {
+        WidgetCenter.shared.reloadAllTimelines()
+        return .result()
+    }
+}
+
+private struct WidgetTapActionModifier: ViewModifier {
+    let refresh: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if refresh {
+            Button(intent: RefreshWidgetIntent()) {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            content.widgetURL(URL(string: "clashdash://refresh"))
+        }
+    }
+}
+
+private extension View {
+    func widgetTapAction(refresh: Bool) -> some View {
+        modifier(WidgetTapActionModifier(refresh: refresh))
+    }
+}
+
+/// Resolves which profile a widget is showing (same rules as the providers) and returns its tap-to-refresh setting.
+private func widgetTapRefreshEnabled(for configuration: WidgetProfileIntent) -> Bool {
+    guard let state = PersistentStore.loadState() else { return true }
+    var selectedID: UUID? = nil
+    if let selected = configuration.selectedProfile,
+       !selected.isAutomatic,
+       let id = selected.profileID() {
+        selectedID = id
+    } else if let defaults = UserDefaults(suiteName: PersistentStore.appGroupIdentifier),
+              let saved = defaults.string(forKey: "widget_profile_selection"),
+              let id = ProfileEntity.resolveProfileID(from: saved) {
+        selectedID = id
+    }
+    let profile = selectedID.flatMap { id in state.profiles.first(where: { $0.id == id }) } ?? state.currentProfile
+    return profile?.widgetTapRefresh ?? true
+}
+
 // MARK: - Widget Rendering Mode for Tinted/Clear Modes
 // Use desaturated rendering mode to prevent images from becoming solid accent color blobs
 struct SimpleEntry: TimelineEntry {
@@ -238,8 +293,9 @@ struct SimpleEntry: TimelineEntry {
     let profileName: String
     let townHallLevel: Int
     let activeBoosts: [ActiveBoost]  // Track active boosts for accurate timer calculations
+    let tapToRefresh: Bool  // Profile setting: tapping the widget refreshes it instead of opening the app
 
-    init(date: Date, upgrades: [BuildingUpgrade], builderCount: Int = 5, totalBuilderUpgradesCount: Int = 0, goldPassBoost: Int = 0, builderHallLevel: Int = 0, debugText: String, profileName: String = "", townHallLevel: Int = 0, activeBoosts: [ActiveBoost] = []) {
+    init(date: Date, upgrades: [BuildingUpgrade], builderCount: Int = 5, totalBuilderUpgradesCount: Int = 0, goldPassBoost: Int = 0, builderHallLevel: Int = 0, debugText: String, profileName: String = "", townHallLevel: Int = 0, activeBoosts: [ActiveBoost] = [], tapToRefresh: Bool = true) {
         self.date = date
         self.upgrades = upgrades
         self.builderCount = builderCount
@@ -250,6 +306,7 @@ struct SimpleEntry: TimelineEntry {
         self.profileName = profileName
         self.townHallLevel = townHallLevel
         self.activeBoosts = activeBoosts
+        self.tapToRefresh = tapToRefresh
     }
 }
 
@@ -267,14 +324,14 @@ struct Provider: AppIntentTimelineProvider {
         let (upgrades, builderCount, goldPassBoost, activeBoosts, totalBuilderUpgradesCount) = loadUpgrades(for: configuration)
         let text = loadDebugText(for: configuration)
         let (profileName, townHallLevel) = loadProfileInfo(for: configuration)
-        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: builderCount, totalBuilderUpgradesCount: totalBuilderUpgradesCount, goldPassBoost: goldPassBoost, debugText: text, profileName: profileName, townHallLevel: townHallLevel, activeBoosts: activeBoosts)
+        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: builderCount, totalBuilderUpgradesCount: totalBuilderUpgradesCount, goldPassBoost: goldPassBoost, debugText: text, profileName: profileName, townHallLevel: townHallLevel, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
     }
 
     func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<SimpleEntry> {
         let (upgrades, builderCount, goldPassBoost, activeBoosts, totalBuilderUpgradesCount) = loadUpgrades(for: configuration)
         let text = loadDebugText(for: configuration)
         let (profileName, townHallLevel) = loadProfileInfo(for: configuration)
-        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: builderCount, totalBuilderUpgradesCount: totalBuilderUpgradesCount, goldPassBoost: goldPassBoost, debugText: text, profileName: profileName, townHallLevel: townHallLevel, activeBoosts: activeBoosts)
+        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: builderCount, totalBuilderUpgradesCount: totalBuilderUpgradesCount, goldPassBoost: goldPassBoost, debugText: text, profileName: profileName, townHallLevel: townHallLevel, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
 
         // Dynamic refresh policy based on active boosts and urgency
         let nextUpdate: Date
@@ -521,7 +578,7 @@ struct ClashDashWidgetEntryView : View {
             .padding(.bottom, 8)
         }
         .padding(12)
-        .widgetURL(URL(string: "clashdash://refresh"))
+        .widgetTapAction(refresh: entry.tapToRefresh)
     }
     
     @ViewBuilder
@@ -1303,13 +1360,13 @@ struct LabPetProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: WidgetProfileIntent, in context: Context) async -> SimpleEntry {
         let (upgrades, activeBoosts) = loadUpgradesAndBoosts(for: configuration)
         let (profileName, _) = loadProfileInfo(for: configuration)
-        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, debugText: "LabPet", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts)
+        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, debugText: "LabPet", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
     }
 
     func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<SimpleEntry> {
         let (upgrades, activeBoosts) = loadUpgradesAndBoosts(for: configuration)
         let (profileName, _) = loadProfileInfo(for: configuration)
-        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, debugText: "LabPet", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts)
+        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, debugText: "LabPet", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
         
         // Adjust refresh rate based on boost activity
         let hasActiveBoosts = !activeBoosts.isEmpty
@@ -1437,6 +1494,7 @@ struct HelperCooldownWidgetEntry: TimelineEntry {
     let date: Date
     let helpers: [HelperCooldownStatus]
     let profileName: String
+    var tapToRefresh: Bool = true
 }
 
 struct HelperCooldownProvider: AppIntentTimelineProvider {
@@ -1451,12 +1509,12 @@ struct HelperCooldownProvider: AppIntentTimelineProvider {
 
     func snapshot(for configuration: WidgetProfileIntent, in context: Context) async -> HelperCooldownWidgetEntry {
         let profileName = loadProfileName(for: configuration)
-        return HelperCooldownWidgetEntry(date: Date(), helpers: loadHelpers(for: configuration), profileName: profileName)
+        return HelperCooldownWidgetEntry(date: Date(), helpers: loadHelpers(for: configuration), profileName: profileName, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
     }
 
     func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<HelperCooldownWidgetEntry> {
         let profileName = loadProfileName(for: configuration)
-        let entry = HelperCooldownWidgetEntry(date: Date(), helpers: loadHelpers(for: configuration), profileName: profileName)
+        let entry = HelperCooldownWidgetEntry(date: Date(), helpers: loadHelpers(for: configuration), profileName: profileName, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
 
         // Schedule next update based on active helper cooldowns so the widget stays responsive.
         let remainingValues = entry.helpers.map { $0.remainingSeconds() }
@@ -1686,7 +1744,7 @@ struct HelperCooldownWidgetEntryView: View {
             }
         }
         .padding(12)
-        .widgetURL(URL(string: "clashdash://refresh"))
+        .widgetTapAction(refresh: entry.tapToRefresh)
     }
 
     private func formatHelperCooldown(_ seconds: Int) -> String {
@@ -2148,7 +2206,7 @@ struct LabPetWidgetEntryView: View {
             }
         }
         .padding(12)
-        .widgetURL(URL(string: "clashdash://refresh"))
+        .widgetTapAction(refresh: entry.tapToRefresh)
     }
 
     @ViewBuilder
@@ -2287,13 +2345,13 @@ struct BuilderBaseProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: WidgetProfileIntent, in context: Context) async -> SimpleEntry {
         let (upgrades, builderHallLevel, activeBoosts) = loadUpgradesAndBoosts(for: configuration)
         let (profileName, _) = loadProfileInfo(for: configuration)
-        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, builderHallLevel: builderHallLevel, debugText: "BuilderBase", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts)
+        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, builderHallLevel: builderHallLevel, debugText: "BuilderBase", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
     }
 
     func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<SimpleEntry> {
         let (upgrades, builderHallLevel, activeBoosts) = loadUpgradesAndBoosts(for: configuration)
         let (profileName, _) = loadProfileInfo(for: configuration)
-        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, builderHallLevel: builderHallLevel, debugText: "BuilderBase", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts)
+        let entry = SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, builderHallLevel: builderHallLevel, debugText: "BuilderBase", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
         
         // Adjust refresh rate based on boost activity
         let hasActiveBoosts = !activeBoosts.isEmpty
@@ -2441,7 +2499,7 @@ struct BuilderBaseWidgetEntryView: View {
             }
         }
         .padding(12)
-        .widgetURL(URL(string: "clashdash://refresh"))
+        .widgetTapAction(refresh: entry.tapToRefresh)
     }
 
     @ViewBuilder
@@ -2567,3 +2625,332 @@ struct BuilderBaseWidget: Widget {
     SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Preview")
 }
 
+
+// MARK: - Combined Overview Widget (2x1): Builders + Builder Base + Helper's Hut
+
+private func widgetIconName(for upgrade: BuildingUpgrade) -> String {
+    let folder: String
+    switch upgrade.category {
+    case .builderVillage: folder = "buildings_home"
+    case .lab: folder = "lab"
+    case .starLab: folder = "builder_base"
+    case .pets: folder = "pets"
+    case .builderBase: folder = "builder_base"
+    }
+
+    func sanitize(_ s: String) -> String {
+        return s.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .joined(separator: "_")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+            .lowercased()
+    }
+
+    let sanitizedName = sanitize(upgrade.name)
+    var variations: [String] = []
+    if upgrade.isSeasonalDefense == true || (upgrade.dataId ?? 0 >= 103_000_000 && upgrade.dataId ?? 0 < 104_000_000) {
+        variations.append("crafted_defenses/\(sanitizedName)")
+    }
+    variations.append("\(folder)/\(sanitizedName)")
+    variations.append(sanitizedName)
+
+    for variant in variations {
+        if UIImage(named: variant) != nil {
+            return variant
+        }
+    }
+    return "\(folder)/\(sanitizedName)"
+}
+
+struct CombinedWidgetEntry: TimelineEntry {
+    let date: Date
+    let home: SimpleEntry
+    let builderBase: SimpleEntry
+    let helpers: HelperCooldownWidgetEntry
+    let tapToRefresh: Bool
+}
+
+struct CombinedProvider: AppIntentTimelineProvider {
+    typealias Intent = WidgetProfileIntent
+    typealias Entry = CombinedWidgetEntry
+
+    func placeholder(in context: Context) -> CombinedWidgetEntry {
+        CombinedWidgetEntry(
+            date: Date(),
+            home: SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Placeholder"),
+            builderBase: SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Placeholder"),
+            helpers: HelperCooldownWidgetEntry(date: Date(), helpers: [], profileName: ""),
+            tapToRefresh: true
+        )
+    }
+
+    func snapshot(for configuration: WidgetProfileIntent, in context: Context) async -> CombinedWidgetEntry {
+        await build(for: configuration, in: context)
+    }
+
+    func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<CombinedWidgetEntry> {
+        let entry = await build(for: configuration, in: context)
+        let now = Date()
+
+        // Default: 15 minutes. Tighten when something is boosted or about to finish.
+        var next = now.addingTimeInterval(15 * 60)
+
+        let boostsActive = entry.home.activeBoosts.contains { $0.endTime > now }
+            || entry.builderBase.activeBoosts.contains { $0.endTime > now }
+        if boostsActive {
+            next = min(next, now.addingTimeInterval(5 * 60))
+        }
+
+        let upgradeRemaining: [TimeInterval] =
+            entry.home.upgrades.map { effectiveRemainingSeconds(for: $0, activeBoosts: entry.home.activeBoosts, referenceDate: now) }
+            + entry.builderBase.upgrades.map { effectiveRemainingSeconds(for: $0, activeBoosts: entry.builderBase.activeBoosts, referenceDate: now) }
+        if let soonest = upgradeRemaining.filter({ $0 > 0 }).min(), soonest <= 300 {
+            next = min(next, now.addingTimeInterval(60))
+        }
+
+        if let helperRemaining = entry.helpers.helpers.map({ $0.remainingSeconds(referenceDate: now) }).filter({ $0 > 0 }).min() {
+            next = min(next, now.addingTimeInterval(helperRemaining <= 30 ? 30 : 5 * 60))
+        }
+
+        return Timeline(entries: [entry], policy: .after(next))
+    }
+
+    /// Reuses the three existing providers so profile selection / boost / helper logic stays identical.
+    private func build(for configuration: WidgetProfileIntent, in context: Context) async -> CombinedWidgetEntry {
+        let home = await Provider().snapshot(for: configuration, in: context)
+        let builderBase = await BuilderBaseProvider().snapshot(for: configuration, in: context)
+        let helpers = await HelperCooldownProvider().snapshot(for: configuration, in: context)
+        return CombinedWidgetEntry(
+            date: Date(),
+            home: home,
+            builderBase: builderBase,
+            helpers: helpers,
+            tapToRefresh: home.tapToRefresh
+        )
+    }
+}
+
+private struct CombinedProgressBar: View {
+    let fraction: Double
+    var height: CGFloat = 2
+    var tint: Color = .green
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.gray.opacity(0.25))
+                Capsule()
+                    .fill(tint)
+                    .frame(width: geo.size.width * CGFloat(min(max(fraction, 0), 1)))
+            }
+        }
+        .frame(height: height)
+    }
+}
+
+private struct CombinedUpgradeRow: View {
+    let upgrade: BuildingUpgrade
+    let activeBoosts: [ActiveBoost]
+    let goldPassBoost: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            trimmedWidgetImage(named: widgetIconName(for: upgrade))
+                .interpolation(.none)
+                .resizable()
+                .clashWidgetTintAwareRendering()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
+
+            Text(upgrade.name)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer(minLength: 2)
+
+            Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(.orange)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(height: 17)
+        .overlay(alignment: .bottom) {
+            CombinedProgressBar(
+                fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost)
+            )
+        }
+    }
+}
+
+private struct CombinedEmptyRow: View {
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 12))
+                .foregroundColor(.green.opacity(0.7))
+                .frame(width: 16, height: 16)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.green.opacity(0.7))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 17)
+    }
+}
+
+private struct CombinedSectionHeader: View {
+    let title: String
+    let status: String
+    let allBusy: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            Text(status)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(allBusy ? .green : .orange)
+                .lineLimit(1)
+        }
+    }
+}
+
+struct CombinedWidgetEntryView: View {
+    var entry: CombinedWidgetEntry
+
+    private var homeSlots: Int { max(min(entry.home.builderCount, 6), 0) }
+    private var bbSlots: Int { entry.builderBase.builderHallLevel >= 6 ? 3 : 1 }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            homeColumn
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            Rectangle()
+                .fill(Color.gray.opacity(0.25))
+                .frame(width: 1)
+                .padding(.vertical, 2)
+
+            VStack(alignment: .leading, spacing: 6) {
+                builderBaseSection
+                helperSection
+                Spacer(minLength: 0)
+                if !entry.home.profileName.isEmpty {
+                    Text(entry.home.profileName)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(12)
+        .widgetTapAction(refresh: entry.tapToRefresh)
+    }
+
+    // MARK: Home village builders (left column)
+    private var homeColumn: some View {
+        let busy = entry.home.totalBuilderUpgradesCount
+        let allBusy = busy >= entry.home.builderCount
+        let free = max(entry.home.builderCount - busy, 0)
+
+        return VStack(alignment: .leading, spacing: homeSlots >= 6 ? 1 : 3) {
+            CombinedSectionHeader(
+                title: "Builders",
+                status: allBusy ? "All busy" : "\(free) free",
+                allBusy: allBusy
+            )
+            ForEach(0..<homeSlots, id: \.self) { index in
+                if index < entry.home.upgrades.count {
+                    CombinedUpgradeRow(
+                        upgrade: entry.home.upgrades[index],
+                        activeBoosts: entry.home.activeBoosts,
+                        goldPassBoost: entry.home.goldPassBoost
+                    )
+                } else {
+                    CombinedEmptyRow(label: "Builder \(index + 1) available")
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: Builder Base (right, top)
+    private var builderBaseSection: some View {
+        let used = entry.builderBase.upgrades.count
+        let allBusy = used >= bbSlots
+        let free = max(bbSlots - used, 0)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            CombinedSectionHeader(
+                title: "Builder Base",
+                status: allBusy ? "All busy" : "\(free) free",
+                allBusy: allBusy
+            )
+            ForEach(0..<bbSlots, id: \.self) { index in
+                if index < entry.builderBase.upgrades.count {
+                    CombinedUpgradeRow(
+                        upgrade: entry.builderBase.upgrades[index],
+                        activeBoosts: entry.builderBase.activeBoosts,
+                        goldPassBoost: entry.builderBase.goldPassBoost
+                    )
+                } else {
+                    CombinedEmptyRow(label: "Available")
+                }
+            }
+        }
+    }
+
+    // MARK: Helper's Hut (right, bottom) - text only, no hut image
+    private var helperSection: some View {
+        let totalSeconds = 23 * 60 * 60
+        let remaining = max(min(entry.helpers.helpers.map { $0.cooldownSeconds }.max() ?? 0, totalSeconds), 0)
+        let progress = max(0, min(1, 1 - (Double(remaining) / Double(totalSeconds))))
+        let hasData = !entry.helpers.helpers.isEmpty
+        let statusText: String = {
+            if !hasData { return "No data" }
+            if remaining <= 0 { return "Ready" }
+            let hours = remaining / 3600
+            let minutes = (remaining % 3600) / 60
+            let seconds = remaining % 60
+            if hours > 0 { return "\(hours)h \(minutes)m" }
+            if minutes > 0 { return "\(minutes)m \(seconds)s" }
+            return "\(seconds)s"
+        }()
+
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text("Helper's Hut")
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                Text(statusText)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(!hasData ? .secondary : (remaining > 0 ? .orange : .green))
+                    .lineLimit(1)
+            }
+            CombinedProgressBar(fraction: hasData ? progress : 0, height: 4)
+        }
+    }
+}
+
+struct CombinedWidget: Widget {
+    let kind: String = "CombinedWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
+            CombinedWidgetEntryView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Overview")
+        .description("Builders, Builder Base and Helper's Hut in one widget. Choose a profile or use the last opened one.")
+        .supportedFamilies([.systemMedium])
+    }
+}

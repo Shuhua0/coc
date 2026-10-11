@@ -113,6 +113,7 @@ extension DataService {
         goldPassBoost = profile.goldPassBoost
         hiddenEquipmentNames = profile.hiddenEquipmentNames
         goldPassReminderEnabled = profile.goldPassReminderEnabled
+        widgetTapRefresh = profile.widgetTapRefresh
     }
 
     func persistChanges(reloadWidgets: Bool) {
