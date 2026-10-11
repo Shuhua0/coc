@@ -328,6 +328,11 @@ struct SimpleEntry: TimelineEntry {
         self.activeBoosts = activeBoosts
         self.tapToRefresh = tapToRefresh
     }
+
+    /// Same data stamped with a different date (used for per-minute entries while a speed boost runs).
+    func withDate(_ newDate: Date) -> SimpleEntry {
+        SimpleEntry(date: newDate, upgrades: upgrades, builderCount: builderCount, totalBuilderUpgradesCount: totalBuilderUpgradesCount, goldPassBoost: goldPassBoost, builderHallLevel: builderHallLevel, debugText: debugText, profileName: profileName, townHallLevel: townHallLevel, activeBoosts: activeBoosts, tapToRefresh: tapToRefresh)
+    }
 }
 
 struct Provider: AppIntentTimelineProvider {
@@ -392,7 +397,7 @@ struct Provider: AppIntentTimelineProvider {
             }
         }
         
-        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
+        return widgetTimeline(entry: entry, upgrades: upgrades, activeBoosts: activeBoosts, fallbackNext: nextUpdate)
     }
     
     private func loadUpgrades(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int, Int, [ActiveBoost], Int) {
@@ -670,7 +675,7 @@ struct ClashDashWidgetEntryView : View {
     }
 
     private func progressFraction(for upgrade: BuildingUpgrade) -> Double {
-        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost)
+        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost, referenceDate: entry.date)
     }
 
     private func iconName(for upgrade: BuildingUpgrade) -> String {
@@ -1392,7 +1397,7 @@ struct LabPetProvider: AppIntentTimelineProvider {
         let hasActiveBoosts = !activeBoosts.isEmpty
         let minutes = hasActiveBoosts ? 1 : 15  // Refresh every 1 min with boosts, 15 min otherwise
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: minutes, to: Date())!
-        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
+        return widgetTimeline(entry: entry, upgrades: upgrades, activeBoosts: activeBoosts, fallbackNext: nextUpdate)
     }
 
     private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], [ActiveBoost]) {
@@ -2300,7 +2305,7 @@ struct LabPetWidgetEntryView: View {
     }
 
     private func progressFraction(for upgrade: BuildingUpgrade) -> Double {
-        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost)
+        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost, referenceDate: entry.date)
     }
 
     private func iconName(for upgrade: BuildingUpgrade) -> String {
@@ -2395,7 +2400,7 @@ struct BuilderBaseProvider: AppIntentTimelineProvider {
         let hasActiveBoosts = !activeBoosts.isEmpty
         let minutes = hasActiveBoosts ? 1 : 15  // Refresh every 1 min with boosts, 15 min otherwise
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: minutes, to: Date())!
-        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
+        return widgetTimeline(entry: entry, upgrades: upgrades, activeBoosts: activeBoosts, fallbackNext: nextUpdate)
     }
 
     private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int, [ActiveBoost]) {
@@ -2594,7 +2599,7 @@ struct BuilderBaseWidgetEntryView: View {
     }
 
     private func progressFraction(for upgrade: BuildingUpgrade) -> Double {
-        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost)
+        boostedProgressFraction(for: upgrade, activeBoosts: entry.activeBoosts, goldPassBoost: entry.goldPassBoost, referenceDate: entry.date)
     }
 
     private func iconName(for upgrade: BuildingUpgrade) -> String {
@@ -2664,6 +2669,48 @@ struct BuilderBaseWidget: Widget {
 }
 
 
+/// While a speed boost (potion, helper, clock tower...) is running, in-app timers run faster than real time.
+/// A widget cannot tick faster than 1x by itself, so we hand WidgetKit one pre-computed entry per minute
+/// (up to 1 hour or until the boost ends). Each entry is rendered with its own `entry.date`.
+private func boostEntryDates(upgrades: [BuildingUpgrade], activeBoosts: [ActiveBoost], now: Date) -> [Date] {
+    let boostEnds: [Date] = activeBoosts.compactMap { boost in
+        guard boost.endTime > now, let type = boost.boostType else { return nil }
+        guard upgrades.contains(where: { type.affectedCategories.contains($0.category) }) else { return nil }
+        return boost.endTime
+    }
+    guard let lastEnd = boostEnds.max() else { return [now] }
+    let horizon = min(lastEnd.timeIntervalSince(now), 60 * 60)
+    var dates: [Date] = []
+    var offset: TimeInterval = 0
+    while offset < horizon {
+        dates.append(now.addingTimeInterval(offset))
+        offset += 60
+    }
+    dates.append(now.addingTimeInterval(horizon))
+    return dates
+}
+
+private func widgetTimeline(entry: SimpleEntry, upgrades: [BuildingUpgrade], activeBoosts: [ActiveBoost], fallbackNext: Date) -> Timeline<SimpleEntry> {
+    let dates = boostEntryDates(upgrades: upgrades, activeBoosts: activeBoosts, now: entry.date)
+    if dates.count > 1, let last = dates.last {
+        return Timeline(entries: dates.map { entry.withDate($0) }, policy: .after(last))
+    }
+    return Timeline(
+        entries: [entry],
+        policy: .after(widgetBoundaryAdjusted(fallbackNext, upgrades: upgrades, activeBoosts: activeBoosts, now: entry.date))
+    )
+}
+
+/// True when a speed boost is running for this upgrade at `date` (then the countdown is not 1x).
+private func hasRunningBoost(for upgrade: BuildingUpgrade, activeBoosts: [ActiveBoost], at date: Date) -> Bool {
+    activeBoosts.contains { boost in
+        guard let type = boost.boostType, type.affectedCategories.contains(upgrade.category) else { return false }
+        if type == .builderApprentice || type == .labAssistant,
+           let target = boost.targetUpgradeId, target != upgrade.id { return false }
+        return boost.endTime > date
+    }
+}
+
 /// Pulls a timeline refresh earlier so the display switches tiers right when an upgrade
 /// crosses the 1-hour mark (static -> live) and when it finishes.
 private func widgetBoundaryAdjusted(_ next: Date, upgrades: [BuildingUpgrade], activeBoosts: [ActiveBoost], now: Date = Date()) -> Date {
@@ -2717,12 +2764,19 @@ private struct LiveUpgradeTimeText: View {
     var alignment: Alignment = .leading
 
     var body: some View {
-        LiveCountdownText(
-            endDate: effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
-            fallback: formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
-            referenceDate: referenceDate,
-            alignment: alignment
-        )
+        let fallback = formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate)
+        if hasRunningBoost(for: upgrade, activeBoosts: activeBoosts, at: referenceDate) {
+            // Boosted time runs faster than 1x, so a live 1x countdown would disagree with the app.
+            // The per-minute timeline entries keep this text in step with the app instead.
+            Text(fallback)
+        } else {
+            LiveCountdownText(
+                endDate: effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
+                fallback: fallback,
+                referenceDate: referenceDate,
+                alignment: alignment
+            )
+        }
     }
 }
 
@@ -2794,7 +2848,26 @@ struct CombinedProvider: AppIntentTimelineProvider {
 
     func timeline(for configuration: WidgetProfileIntent, in context: Context) async -> Timeline<CombinedWidgetEntry> {
         let entry = await build(for: configuration, in: context)
-        let now = Date()
+        let now = entry.date
+
+        // Speed boost running: one entry per minute so the widget follows the accelerated in-app clock.
+        let allUpgrades = entry.home.upgrades + entry.labPet.upgrades + entry.builderBase.upgrades
+        let allBoosts = entry.home.activeBoosts + entry.labPet.activeBoosts + entry.builderBase.activeBoosts
+        let boostDates = boostEntryDates(upgrades: allUpgrades, activeBoosts: allBoosts, now: now)
+        if boostDates.count > 1, let last = boostDates.last {
+            let entries = boostDates.map { d in
+                CombinedWidgetEntry(
+                    date: d,
+                    home: entry.home,
+                    labPet: entry.labPet,
+                    builderBase: entry.builderBase,
+                    helpers: entry.helpers,
+                    tapToRefresh: entry.tapToRefresh,
+                    nickname: entry.nickname
+                )
+            }
+            return Timeline(entries: entries, policy: .after(last))
+        }
 
         // Default: 15 minutes. Tighten when something is boosted or about to finish.
         var next = now.addingTimeInterval(15 * 60)
@@ -2873,6 +2946,7 @@ private struct CombinedUpgradeRow: View {
     let upgrade: BuildingUpgrade
     let activeBoosts: [ActiveBoost]
     let goldPassBoost: Int
+    var referenceDate: Date = Date()
     var rowHeight: CGFloat = 17
 
     var body: some View {
@@ -2891,7 +2965,7 @@ private struct CombinedUpgradeRow: View {
 
             Spacer(minLength: 2)
 
-            LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, alignment: .trailing)
+            LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate, alignment: .trailing)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(.orange)
                 .lineLimit(1)
@@ -2900,7 +2974,7 @@ private struct CombinedUpgradeRow: View {
         .frame(height: rowHeight)
         .overlay(alignment: .bottom) {
             CombinedProgressBar(
-                fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost)
+                fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost, referenceDate: referenceDate)
             )
         }
     }
@@ -3026,7 +3100,8 @@ struct CombinedWidgetEntryView: View {
                     CombinedUpgradeRow(
                         upgrade: entry.home.upgrades[index],
                         activeBoosts: entry.home.activeBoosts,
-                        goldPassBoost: entry.home.goldPassBoost
+                        goldPassBoost: entry.home.goldPassBoost,
+                        referenceDate: entry.date
                     )
                 } else {
                     CombinedEmptyRow(label: "Builder \(index + 1) available")
@@ -3054,6 +3129,7 @@ struct CombinedWidgetEntryView: View {
                         upgrade: entry.labPet.upgrades[index],
                         activeBoosts: entry.labPet.activeBoosts,
                         goldPassBoost: entry.labPet.goldPassBoost,
+                        referenceDate: entry.date,
                         rowHeight: rightRowHeight
                     )
                 } else {
@@ -3081,6 +3157,7 @@ struct CombinedWidgetEntryView: View {
                         upgrade: entry.builderBase.upgrades[index],
                         activeBoosts: entry.builderBase.activeBoosts,
                         goldPassBoost: entry.builderBase.goldPassBoost,
+                        referenceDate: entry.date,
                         rowHeight: rightRowHeight
                     )
                 } else {
