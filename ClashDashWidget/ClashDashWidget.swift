@@ -392,7 +392,7 @@ struct Provider: AppIntentTimelineProvider {
             }
         }
         
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
     }
     
     private func loadUpgrades(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int, Int, [ActiveBoost], Int) {
@@ -1392,7 +1392,7 @@ struct LabPetProvider: AppIntentTimelineProvider {
         let hasActiveBoosts = !activeBoosts.isEmpty
         let minutes = hasActiveBoosts ? 1 : 15  // Refresh every 1 min with boosts, 15 min otherwise
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: minutes, to: Date())!
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
     }
 
     private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], [ActiveBoost]) {
@@ -1551,7 +1551,12 @@ struct HelperCooldownProvider: AppIntentTimelineProvider {
             nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
         }
 
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        // Switch to the live countdown right when the longest cooldown drops under 1 hour
+        var helperNext = nextUpdate
+        if let longest = entry.helpers.map({ $0.remainingSeconds() }).max(), longest > 3600 {
+            helperNext = min(helperNext, Date().addingTimeInterval(Double(longest - 3600 + 1)))
+        }
+        return Timeline(entries: [entry], policy: .after(helperNext))
     }
 
     private func loadHelpers(for configuration: WidgetProfileIntent) -> [HelperCooldownStatus] {
@@ -2390,7 +2395,7 @@ struct BuilderBaseProvider: AppIntentTimelineProvider {
         let hasActiveBoosts = !activeBoosts.isEmpty
         let minutes = hasActiveBoosts ? 1 : 15  // Refresh every 1 min with boosts, 15 min otherwise
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: minutes, to: Date())!
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        return Timeline(entries: [entry], policy: .after(widgetBoundaryAdjusted(nextUpdate, upgrades: upgrades, activeBoosts: activeBoosts)))
     }
 
     private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int, [ActiveBoost]) {
@@ -2659,21 +2664,42 @@ struct BuilderBaseWidget: Widget {
 }
 
 
+/// Pulls a timeline refresh earlier so the display switches tiers right when an upgrade
+/// crosses the 1-hour mark (static -> live) and when it finishes.
+private func widgetBoundaryAdjusted(_ next: Date, upgrades: [BuildingUpgrade], activeBoosts: [ActiveBoost], now: Date = Date()) -> Date {
+    var result = next
+    for upgrade in upgrades {
+        let remaining = effectiveRemainingSeconds(for: upgrade, activeBoosts: activeBoosts, referenceDate: now)
+        if remaining > 3600 {
+            result = min(result, now.addingTimeInterval(remaining - 3600 + 1))
+        } else if remaining > 0 {
+            result = min(result, now.addingTimeInterval(remaining + 1))
+        }
+    }
+    return max(result, now.addingTimeInterval(10))
+}
+
 // MARK: - Live countdown text
 // Text(timerInterval:) is rendered by iOS itself and ticks every second without a timeline reload.
-// Under 24h we show a live h:mm:ss / mm:ss countdown; longer durations keep the static "Xd Yh" text.
+// Display tiers:
+//   1 day or more      -> "Nd Nh"   (static)
+//   1 hour to 1 day    -> "Nh Nm"   (static)
+//   under 1 hour       -> live "mm:ss" countdown (iOS cannot draw "Nm Ns" with unit letters live).
+// Set this to false to show a static "Nm Ns" under 1 hour instead (updates on widget refresh only).
+private let widgetLiveCountdownUnderOneHour = true
+
 private struct LiveCountdownText: View {
     let endDate: Date
     let fallback: String
     var referenceDate: Date = Date()
     var alignment: Alignment = .leading
-    var width: CGFloat = 48
+    var width: CGFloat = 38
 
     private var remaining: TimeInterval { endDate.timeIntervalSince(referenceDate) }
 
     var body: some View {
-        if remaining > 0 && remaining < 24 * 3600 {
-            Text(timerInterval: referenceDate...endDate, pauseTime: nil, countsDown: true, showsHours: remaining >= 3600)
+        if widgetLiveCountdownUnderOneHour && remaining > 0 && remaining < 3600 {
+            Text(timerInterval: referenceDate...endDate, pauseTime: nil, countsDown: true, showsHours: false)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -2794,6 +2820,14 @@ struct CombinedProvider: AppIntentTimelineProvider {
 
         if let helperRemaining = entry.helpers.helpers.map({ $0.remainingSeconds(referenceDate: now) }).filter({ $0 > 0 }).min() {
             next = min(next, now.addingTimeInterval(helperRemaining <= 30 ? 30 : 5 * 60))
+        }
+
+        // Re-render exactly when something drops under 1 hour (static -> live countdown) or finishes.
+        for part in [entry.home, entry.labPet, entry.builderBase] {
+            next = widgetBoundaryAdjusted(next, upgrades: part.upgrades, activeBoosts: part.activeBoosts, now: now)
+        }
+        if let longestHelper = entry.helpers.helpers.map({ $0.remainingSeconds(referenceDate: now) }).max(), longestHelper > 3600 {
+            next = min(next, now.addingTimeInterval(Double(longestHelper - 3600 + 1)))
         }
 
         return Timeline(entries: [entry], policy: .after(next))
@@ -3086,7 +3120,7 @@ struct CombinedWidgetEntryView: View {
                     fallback: statusText,
                     referenceDate: entry.date,
                     alignment: .trailing,
-                    width: 44
+                    width: 38
                 )
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(statusColor)
