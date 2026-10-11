@@ -263,9 +263,9 @@ private extension View {
     }
 }
 
-/// Resolves which profile a widget is showing (same rules as the providers) and returns its tap-to-refresh setting.
-private func widgetTapRefreshEnabled(for configuration: WidgetProfileIntent) -> Bool {
-    guard let state = PersistentStore.loadState() else { return true }
+/// Resolves which profile a widget is showing (same rules as the providers).
+private func widgetProfile(for configuration: WidgetProfileIntent) -> PlayerAccount? {
+    guard let state = PersistentStore.loadState() else { return nil }
     var selectedID: UUID? = nil
     if let selected = configuration.selectedProfile,
        !selected.isAutomatic,
@@ -276,8 +276,28 @@ private func widgetTapRefreshEnabled(for configuration: WidgetProfileIntent) -> 
               let id = ProfileEntity.resolveProfileID(from: saved) {
         selectedID = id
     }
-    let profile = selectedID.flatMap { id in state.profiles.first(where: { $0.id == id }) } ?? state.currentProfile
-    return profile?.widgetTapRefresh ?? true
+    return selectedID.flatMap { id in state.profiles.first(where: { $0.id == id }) } ?? state.currentProfile
+}
+
+private func widgetTapRefreshEnabled(for configuration: WidgetProfileIntent) -> Bool {
+    widgetProfile(for: configuration)?.widgetTapRefresh ?? true
+}
+
+/// "Nickname (#TAG)" using the in-game name when known.
+private func widgetNicknameLabel(for configuration: WidgetProfileIntent) -> String {
+    guard let profile = widgetProfile(for: configuration) else { return "" }
+    let tag = profile.tag
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "#", with: "")
+        .uppercased()
+    let tagLabel = tag.isEmpty ? "" : "#\(tag)"
+    var name = (profile.cachedProfile?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if name.isEmpty {
+        name = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let nameAsTag = name.replacingOccurrences(of: "#", with: "").uppercased()
+    if name.isEmpty || nameAsTag == tag { return tagLabel }
+    return tagLabel.isEmpty ? name : "\(name) (\(tagLabel))"
 }
 
 // MARK: - Widget Rendering Mode for Tinted/Clear Modes
@@ -2664,9 +2684,11 @@ private func widgetIconName(for upgrade: BuildingUpgrade) -> String {
 struct CombinedWidgetEntry: TimelineEntry {
     let date: Date
     let home: SimpleEntry
+    let labPet: SimpleEntry
     let builderBase: SimpleEntry
     let helpers: HelperCooldownWidgetEntry
     let tapToRefresh: Bool
+    let nickname: String
 }
 
 struct CombinedProvider: AppIntentTimelineProvider {
@@ -2674,12 +2696,15 @@ struct CombinedProvider: AppIntentTimelineProvider {
     typealias Entry = CombinedWidgetEntry
 
     func placeholder(in context: Context) -> CombinedWidgetEntry {
-        CombinedWidgetEntry(
+        let empty = SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Placeholder")
+        return CombinedWidgetEntry(
             date: Date(),
-            home: SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Placeholder"),
-            builderBase: SimpleEntry(date: Date(), upgrades: [], builderCount: 5, debugText: "Placeholder"),
+            home: empty,
+            labPet: empty,
+            builderBase: empty,
             helpers: HelperCooldownWidgetEntry(date: Date(), helpers: [], profileName: ""),
-            tapToRefresh: true
+            tapToRefresh: true,
+            nickname: ""
         )
     }
 
@@ -2694,15 +2719,18 @@ struct CombinedProvider: AppIntentTimelineProvider {
         // Default: 15 minutes. Tighten when something is boosted or about to finish.
         var next = now.addingTimeInterval(15 * 60)
 
-        let boostsActive = entry.home.activeBoosts.contains { $0.endTime > now }
-            || entry.builderBase.activeBoosts.contains { $0.endTime > now }
+        let boostsActive = [entry.home, entry.labPet, entry.builderBase]
+            .contains { $0.activeBoosts.contains { $0.endTime > now } }
         if boostsActive {
             next = min(next, now.addingTimeInterval(5 * 60))
         }
 
-        let upgradeRemaining: [TimeInterval] =
-            entry.home.upgrades.map { effectiveRemainingSeconds(for: $0, activeBoosts: entry.home.activeBoosts, referenceDate: now) }
-            + entry.builderBase.upgrades.map { effectiveRemainingSeconds(for: $0, activeBoosts: entry.builderBase.activeBoosts, referenceDate: now) }
+        var upgradeRemaining: [TimeInterval] = []
+        for part in [entry.home, entry.labPet, entry.builderBase] {
+            for upgrade in part.upgrades {
+                upgradeRemaining.append(effectiveRemainingSeconds(for: upgrade, activeBoosts: part.activeBoosts, referenceDate: now))
+            }
+        }
         if let soonest = upgradeRemaining.filter({ $0 > 0 }).min(), soonest <= 300 {
             next = min(next, now.addingTimeInterval(60))
         }
@@ -2714,17 +2742,20 @@ struct CombinedProvider: AppIntentTimelineProvider {
         return Timeline(entries: [entry], policy: .after(next))
     }
 
-    /// Reuses the three existing providers so profile selection / boost / helper logic stays identical.
+    /// Reuses the existing providers so profile selection / boost / helper logic stays identical.
     private func build(for configuration: WidgetProfileIntent, in context: Context) async -> CombinedWidgetEntry {
         let home = await Provider().snapshot(for: configuration, in: context)
+        let labPet = await LabPetProvider().snapshot(for: configuration, in: context)
         let builderBase = await BuilderBaseProvider().snapshot(for: configuration, in: context)
         let helpers = await HelperCooldownProvider().snapshot(for: configuration, in: context)
         return CombinedWidgetEntry(
             date: Date(),
             home: home,
+            labPet: labPet,
             builderBase: builderBase,
             helpers: helpers,
-            tapToRefresh: home.tapToRefresh
+            tapToRefresh: home.tapToRefresh,
+            nickname: widgetNicknameLabel(for: configuration)
         )
     }
 }
@@ -2751,6 +2782,7 @@ private struct CombinedUpgradeRow: View {
     let upgrade: BuildingUpgrade
     let activeBoosts: [ActiveBoost]
     let goldPassBoost: Int
+    var rowHeight: CGFloat = 17
 
     var body: some View {
         HStack(spacing: 5) {
@@ -2759,7 +2791,7 @@ private struct CombinedUpgradeRow: View {
                 .resizable()
                 .clashWidgetTintAwareRendering()
                 .scaledToFit()
-                .frame(width: 16, height: 16)
+                .frame(width: rowHeight - 1, height: rowHeight - 1)
 
             Text(upgrade.name)
                 .font(.system(size: 10, weight: .semibold))
@@ -2774,7 +2806,7 @@ private struct CombinedUpgradeRow: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(height: 17)
+        .frame(height: rowHeight)
         .overlay(alignment: .bottom) {
             CombinedProgressBar(
                 fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost)
@@ -2785,20 +2817,21 @@ private struct CombinedUpgradeRow: View {
 
 private struct CombinedEmptyRow: View {
     let label: String
+    var rowHeight: CGFloat = 17
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 12))
                 .foregroundColor(.green.opacity(0.7))
-                .frame(width: 16, height: 16)
+                .frame(width: rowHeight - 1, height: rowHeight - 1)
             Text(label)
                 .font(.system(size: 10))
                 .foregroundColor(.green.opacity(0.7))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .frame(height: 17)
+        .frame(height: rowHeight)
     }
 }
 
@@ -2822,40 +2855,70 @@ private struct CombinedSectionHeader: View {
     }
 }
 
+/// Right-hand column variants.
+enum CombinedLayout {
+    /// Widget 5: Lab & Pets + Helper's Hut
+    case labPetHelper
+    /// Widget 6: Lab & Pets + Helper's Hut + Builder Base, nickname centered at the bottom
+    case labPetHelperBuilderBase
+}
+
 struct CombinedWidgetEntryView: View {
     var entry: CombinedWidgetEntry
+    var layout: CombinedLayout = .labPetHelper
 
+    private var isFull: Bool { layout == .labPetHelperBuilderBase }
+    private var rightRowHeight: CGFloat { isFull ? 15 : 17 }
     private var homeSlots: Int { max(min(entry.home.builderCount, 6), 0) }
     private var bbSlots: Int { entry.builderBase.builderHallLevel >= 6 ? 3 : 1 }
+    private var labPetSlots: Int { 2 }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            homeColumn
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+        VStack(spacing: isFull ? 3 : 0) {
+            HStack(alignment: .top, spacing: 8) {
+                homeColumn
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
 
-            Rectangle()
-                .fill(Color.gray.opacity(0.25))
-                .frame(width: 1)
-                .padding(.vertical, 2)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.25))
+                    .frame(width: 1)
+                    .padding(.vertical, 2)
 
-            VStack(alignment: .leading, spacing: 6) {
-                builderBaseSection
-                helperSection
-                Spacer(minLength: 0)
-                if !entry.home.profileName.isEmpty {
-                    Text(entry.home.profileName)
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: isFull ? 4 : 6) {
+                    labPetSection
+                    if isFull {
+                        helperSection(compact: true)
+                        builderBaseSection
+                    } else {
+                        helperSection(compact: false)
+                    }
+                    Spacer(minLength: 0)
+                    if !isFull, !entry.home.profileName.isEmpty {
+                        Text(entry.home.profileName)
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            if isFull, !entry.nickname.isEmpty {
+                Text(entry.nickname)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.top, isFull ? 10 : 12)
+        .padding(.bottom, isFull ? 8 : 12)
         .widgetTapAction(refresh: entry.tapToRefresh)
     }
 
-    // MARK: Home village builders (left column)
+    // MARK: Home village builders (left column, shared by both layouts)
     private var homeColumn: some View {
         let busy = entry.home.totalBuilderUpgradesCount
         let allBusy = busy >= entry.home.builderCount
@@ -2882,7 +2945,34 @@ struct CombinedWidgetEntryView: View {
         }
     }
 
-    // MARK: Builder Base (right, top)
+    // MARK: Lab & Pets
+    private var labPetSection: some View {
+        let used = entry.labPet.upgrades.count
+        let allBusy = used >= labPetSlots
+        let free = max(labPetSlots - used, 0)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            CombinedSectionHeader(
+                title: "Lab & Pets",
+                status: allBusy ? "All busy" : "\(free) free",
+                allBusy: allBusy
+            )
+            ForEach(0..<labPetSlots, id: \.self) { index in
+                if index < entry.labPet.upgrades.count {
+                    CombinedUpgradeRow(
+                        upgrade: entry.labPet.upgrades[index],
+                        activeBoosts: entry.labPet.activeBoosts,
+                        goldPassBoost: entry.labPet.goldPassBoost,
+                        rowHeight: rightRowHeight
+                    )
+                } else {
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
+                }
+            }
+        }
+    }
+
+    // MARK: Builder Base (widget 6 only)
     private var builderBaseSection: some View {
         let used = entry.builderBase.upgrades.count
         let allBusy = used >= bbSlots
@@ -2899,17 +2989,18 @@ struct CombinedWidgetEntryView: View {
                     CombinedUpgradeRow(
                         upgrade: entry.builderBase.upgrades[index],
                         activeBoosts: entry.builderBase.activeBoosts,
-                        goldPassBoost: entry.builderBase.goldPassBoost
+                        goldPassBoost: entry.builderBase.goldPassBoost,
+                        rowHeight: rightRowHeight
                     )
                 } else {
-                    CombinedEmptyRow(label: "Available")
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
                 }
             }
         }
     }
 
-    // MARK: Helper's Hut (right, bottom) - text only, no hut image
-    private var helperSection: some View {
+    // MARK: Helper's Hut - text only, no hut image
+    private func helperSection(compact: Bool) -> some View {
         let totalSeconds = 23 * 60 * 60
         let remaining = max(min(entry.helpers.helpers.map { $0.cooldownSeconds }.max() ?? 0, totalSeconds), 0)
         let progress = max(0, min(1, 1 - (Double(remaining) / Double(totalSeconds))))
@@ -2924,6 +3015,7 @@ struct CombinedWidgetEntryView: View {
             if minutes > 0 { return "\(minutes)m \(seconds)s" }
             return "\(seconds)s"
         }()
+        let statusColor: Color = !hasData ? .secondary : (remaining > 0 ? .orange : .green)
 
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
@@ -2933,24 +3025,40 @@ struct CombinedWidgetEntryView: View {
                 Spacer(minLength: 2)
                 Text(statusText)
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(!hasData ? .secondary : (remaining > 0 ? .orange : .green))
+                    .foregroundColor(statusColor)
                     .lineLimit(1)
             }
-            CombinedProgressBar(fraction: hasData ? progress : 0, height: 4)
+            CombinedProgressBar(fraction: hasData ? progress : 0, height: compact ? 3 : 4)
         }
     }
 }
 
+/// Widget 5: Builders | Lab & Pets + Helper's Hut
 struct CombinedWidget: Widget {
     let kind: String = "CombinedWidget"
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
-            CombinedWidgetEntryView(entry: entry)
+            CombinedWidgetEntryView(entry: entry, layout: .labPetHelper)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Overview")
-        .description("Builders, Builder Base and Helper's Hut in one widget. Choose a profile or use the last opened one.")
+        .description("Builders, Lab & Pets and Helper's Hut in one widget. Choose a profile or use the last opened one.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+/// Widget 6: Builders | Lab & Pets + Helper's Hut + Builder Base, nickname at the bottom
+struct CombinedFullWidget: Widget {
+    let kind: String = "CombinedFullWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
+            CombinedWidgetEntryView(entry: entry, layout: .labPetHelperBuilderBase)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Overview + Builder Base")
+        .description("Builders, Lab & Pets, Helper's Hut and Builder Base with your nickname and player tag.")
         .supportedFamilies([.systemMedium])
     }
 }

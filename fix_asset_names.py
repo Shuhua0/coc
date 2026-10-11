@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """에셋 카탈로그 정리 스크립트 (빌드 전에 실행)
 1) 이미지 파일명의 특수문자(U+202F 등)를 ASCII로 변경하고 Contents.json도 맞춤
-2) lab/ 와 buildings_home/ 안의 대문자 이미지셋 이름을 소문자로 변경
+2) lab/, buildings_home/, equipment/ 안의 대문자 이미지셋 이름을 소문자로 변경
    (코드는 'lab/barbarian' 처럼 소문자로 찾는데 저장소에는 'Barbarian'으로 올라가 있어서 이미지가 안 나옴)
 사용법: python3 fix_asset_names.py clash_widgets/Assets.xcassets
 """
@@ -45,7 +45,7 @@ print("filenames fixed:", fixed)
 
 # ---- 2) 대문자 이미지셋 이름을 소문자로 ----
 renamed = 0
-for folder in ("lab", "buildings_home"):
+for folder in ("lab", "buildings_home", "equipment"):
     base = os.path.join(root, folder)
     if not os.path.isdir(base):
         continue

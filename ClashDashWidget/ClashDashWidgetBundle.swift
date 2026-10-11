@@ -17,6 +17,7 @@ struct ClashDashWidgetBundle: WidgetBundle {
         HelperCooldownWidget()
         ClosestUpgradeWidget()
         CombinedWidget()
+        CombinedFullWidget()
         // WarStatusWidget()  // Hidden for now
         // WarStatusSmallWidget()  // Hidden for now
         // ClanWarWidget()  // Hidden for now
