@@ -634,7 +634,7 @@ struct ClashDashWidgetEntryView : View {
                         Text(upgrade.levelDisplayText)
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
-                        Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: entry.activeBoosts))
+                        LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: entry.activeBoosts, referenceDate: entry.date)
                             .font(.system(size: 9))
                             .foregroundColor(.orange)
                     }
@@ -1678,6 +1678,7 @@ struct HelperCooldownWidgetEntryView: View {
         let totalSeconds = 23 * 60 * 60
         let remaining = max(min(cooldownSeconds, totalSeconds), 0)
         let progress = max(0, min(1, 1 - (Double(remaining) / Double(totalSeconds))))
+        let helperEnd = entry.helpers.compactMap { $0.expiresAt }.max() ?? Date.distantPast
 
         return VStack(spacing: 6) {
             HStack {
@@ -1717,7 +1718,13 @@ struct HelperCooldownWidgetEntryView: View {
                         .frame(height: 6)
 
                         // Status on separate line
-                        Text(entry.helpers.first?.cooldownText(referenceDate: context.date) ?? (clamped <= 0 ? "Ready to Work" : "0s"))
+                        LiveCountdownText(
+                            endDate: helperEnd,
+                            fallback: entry.helpers.first?.cooldownText(referenceDate: context.date) ?? (clamped <= 0 ? "Ready to Work" : "0s"),
+                            referenceDate: entry.date,
+                            alignment: .center,
+                            width: 60
+                        )
                             .font(.system(size: 10))
                             .foregroundColor(clamped > 0 ? .orange : .green)
                     }
@@ -1738,7 +1745,13 @@ struct HelperCooldownWidgetEntryView: View {
                     .frame(height: 6)
 
                     // Status on separate line
-                    Text(formatHelperCooldown(remaining))
+                    LiveCountdownText(
+                        endDate: helperEnd,
+                        fallback: formatHelperCooldown(remaining),
+                        referenceDate: entry.date,
+                        alignment: .center,
+                        width: 60
+                    )
                         .font(.system(size: 10))
                         .foregroundColor(remaining > 0 ? .orange : .green)
                 }
@@ -2260,7 +2273,7 @@ struct LabPetWidgetEntryView: View {
                 }
 
                 // Time remaining on separate line
-                Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: entry.activeBoosts))
+                LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: entry.activeBoosts, referenceDate: entry.date)
                     .font(.system(size: 10))
                     .foregroundColor(.orange)
 
@@ -2553,7 +2566,7 @@ struct BuilderBaseWidgetEntryView: View {
                 }
 
                 // Time remaining on separate line
-                Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: entry.activeBoosts))
+                LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: entry.activeBoosts, referenceDate: entry.date)
                     .font(.system(size: 9))
                     .foregroundColor(.orange)
                     .bold()
@@ -2646,6 +2659,47 @@ struct BuilderBaseWidget: Widget {
 }
 
 
+// MARK: - Live countdown text
+// Text(timerInterval:) is rendered by iOS itself and ticks every second without a timeline reload.
+// Under 24h we show a live h:mm:ss / mm:ss countdown; longer durations keep the static "Xd Yh" text.
+private struct LiveCountdownText: View {
+    let endDate: Date
+    let fallback: String
+    var referenceDate: Date = Date()
+    var alignment: Alignment = .leading
+    var width: CGFloat = 48
+
+    private var remaining: TimeInterval { endDate.timeIntervalSince(referenceDate) }
+
+    var body: some View {
+        if remaining > 0 && remaining < 24 * 3600 {
+            Text(timerInterval: referenceDate...endDate, pauseTime: nil, countsDown: true, showsHours: remaining >= 3600)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: width, alignment: alignment)
+        } else {
+            Text(fallback)
+        }
+    }
+}
+
+private struct LiveUpgradeTimeText: View {
+    let upgrade: BuildingUpgrade
+    let activeBoosts: [ActiveBoost]
+    var referenceDate: Date = Date()
+    var alignment: Alignment = .leading
+
+    var body: some View {
+        LiveCountdownText(
+            endDate: effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
+            fallback: formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
+            referenceDate: referenceDate,
+            alignment: alignment
+        )
+    }
+}
+
 // MARK: - Combined Overview Widget (2x1): Builders + Builder Base + Helper's Hut
 
 private func widgetIconName(for upgrade: BuildingUpgrade) -> String {
@@ -2731,8 +2785,11 @@ struct CombinedProvider: AppIntentTimelineProvider {
                 upgradeRemaining.append(effectiveRemainingSeconds(for: upgrade, activeBoosts: part.activeBoosts, referenceDate: now))
             }
         }
-        if let soonest = upgradeRemaining.filter({ $0 > 0 }).min(), soonest <= 300 {
-            next = min(next, now.addingTimeInterval(60))
+        if let soonest = upgradeRemaining.filter({ $0 > 0 }).min() {
+            next = min(next, now.addingTimeInterval(max(soonest + 1, 15)))
+            if soonest <= 300 {
+                next = min(next, now.addingTimeInterval(60))
+            }
         }
 
         if let helperRemaining = entry.helpers.helpers.map({ $0.remainingSeconds(referenceDate: now) }).filter({ $0 > 0 }).min() {
@@ -2800,7 +2857,7 @@ private struct CombinedUpgradeRow: View {
 
             Spacer(minLength: 2)
 
-            Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts))
+            LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, alignment: .trailing)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(.orange)
                 .lineLimit(1)
@@ -3016,6 +3073,7 @@ struct CombinedWidgetEntryView: View {
             return "\(seconds)s"
         }()
         let statusColor: Color = !hasData ? .secondary : (remaining > 0 ? .orange : .green)
+        let helperEnd = entry.helpers.helpers.compactMap { $0.expiresAt }.max() ?? Date.distantPast
 
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
@@ -3023,7 +3081,13 @@ struct CombinedWidgetEntryView: View {
                     .font(.system(size: 10, weight: .bold))
                     .lineLimit(1)
                 Spacer(minLength: 2)
-                Text(statusText)
+                LiveCountdownText(
+                    endDate: helperEnd,
+                    fallback: statusText,
+                    referenceDate: entry.date,
+                    alignment: .trailing,
+                    width: 44
+                )
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(statusColor)
                     .lineLimit(1)
