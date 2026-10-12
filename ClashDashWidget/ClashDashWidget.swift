@@ -3034,8 +3034,9 @@ struct CombinedWidgetEntryView: View {
 
     private var isFull: Bool { layout == .labPetHelperBuilderBase }
     private var rightRowHeight: CGFloat { isFull ? 15 : 17 }
+    private var leftRowHeight: CGFloat { isFull ? 15 : 17 }
     private var homeSlots: Int { max(min(entry.home.builderCount, 6), 0) }
-    private var bbSlots: Int { entry.builderBase.builderHallLevel >= 6 ? 3 : 1 }
+    private var bbSlots: Int { 3 }
     private var labPetSlots: Int { 2 }
 
     var body: some View {
@@ -3052,10 +3053,9 @@ struct CombinedWidgetEntryView: View {
                 VStack(alignment: .leading, spacing: isFull ? 4 : 6) {
                     labPetSection
                     if isFull {
-                        helperSection(compact: true)
                         builderBaseSection
                     } else {
-                        helperSection(compact: false)
+                        helperSection()
                     }
                     Spacer(minLength: 0)
                     if !isFull, !entry.home.profileName.isEmpty {
@@ -3068,12 +3068,11 @@ struct CombinedWidgetEntryView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
 
-            if isFull, !entry.nickname.isEmpty {
-                Text(entry.nickname)
-                    .font(.system(size: 9))
+            if isFull, !entry.home.profileName.isEmpty {
+                Text(entry.home.profileName)
+                    .font(.system(size: 8))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
@@ -3101,13 +3100,17 @@ struct CombinedWidgetEntryView: View {
                         upgrade: entry.home.upgrades[index],
                         activeBoosts: entry.home.activeBoosts,
                         goldPassBoost: entry.home.goldPassBoost,
-                        referenceDate: entry.date
+                        referenceDate: entry.date,
+                        rowHeight: leftRowHeight
                     )
                 } else {
-                    CombinedEmptyRow(label: "Builder \(index + 1) available")
+                    CombinedEmptyRow(label: "Builder \(index + 1) available", rowHeight: leftRowHeight)
                 }
             }
             Spacer(minLength: 0)
+            if isFull {
+                helperSection()
+            }
         }
     }
 
@@ -3168,7 +3171,7 @@ struct CombinedWidgetEntryView: View {
     }
 
     // MARK: Helper's Hut - text only, no hut image
-    private func helperSection(compact: Bool) -> some View {
+    private func helperSection() -> some View {
         let totalSeconds = 23 * 60 * 60
         let remaining = max(min(entry.helpers.helpers.map { $0.cooldownSeconds }.max() ?? 0, totalSeconds), 0)
         let progress = max(0, min(1, 1 - (Double(remaining) / Double(totalSeconds))))
@@ -3203,7 +3206,7 @@ struct CombinedWidgetEntryView: View {
                     .foregroundColor(statusColor)
                     .lineLimit(1)
             }
-            CombinedProgressBar(fraction: hasData ? progress : 0, height: compact ? 3 : 4)
+            CombinedProgressBar(fraction: hasData ? progress : 0)
         }
     }
 }
@@ -3233,7 +3236,7 @@ struct CombinedFullWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Overview + Builder Base")
-        .description("Builders, Lab & Pets, Helper's Hut and Builder Base with your nickname and player tag.")
+        .description("Builders, Lab & Pets, Helper's Hut and Builder Base with your nickname.")
         .supportedFamilies([.systemMedium])
     }
 }

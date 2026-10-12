@@ -297,6 +297,11 @@ struct ContentView: View {
 
     private func handleWidgetImportRequest() {
         let defaults = UserDefaults(suiteName: DataService.appGroup)
+        // A Shortcuts import ran in the background; reload so we don't overwrite it with stale state.
+        if defaults?.bool(forKey: "import_applied_externally") == true {
+            defaults?.set(false, forKey: "import_applied_externally")
+            dataService.loadFromStorage()
+        }
         let requested = defaults?.bool(forKey: "widget_import_requested") ?? false
         guard requested else { return }
         defaults?.set(false, forKey: "widget_import_requested")

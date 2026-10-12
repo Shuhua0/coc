@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppIntents
 import WidgetKit
 import GoogleMobileAds
 import UserMessagingPlatform
@@ -147,3 +148,54 @@ class AdConsentManager {
     }
 }
 
+
+
+// MARK: - Shortcuts: import clipboard without opening the app
+// Shortcuts app flow: "Get Clipboard" -> "Import Village Data" (Text = Clipboard).
+// Runs in the background (openAppWhenRun = false) and shows a result banner.
+struct ImportVillageDataIntent: AppIntent {
+    static let title: LocalizedStringResource = "Import Village Data"
+    static let description = IntentDescription("Import the copied village export into the app without opening it.")
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Village Data", description: "Village export JSON (pass the Clipboard here)")
+    var text: String?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        var input = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if input.isEmpty {
+            input = (clipboardTextFromPasteboard() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !input.isEmpty else {
+            return .result(dialog: "Clipboard was empty. Copy your village export first.")
+        }
+
+        let service = DataService(apiKey: nil)
+        let result = service.importClipboardToMatchingProfile(input: input)
+
+        switch result {
+        case .success(_, let count, _):
+            // Let the app reload from disk next time it becomes active.
+            UserDefaults(suiteName: DataService.appGroup)?.set(true, forKey: "import_applied_externally")
+            // Give the background persistence queue time to finish writing.
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            return .result(dialog: "Imported! \(count) active upgrades.")
+        case .missingProfile(let tag):
+            return .result(dialog: "No profile found for #\(tag). Add the profile in the app first.")
+        case .invalidJSON:
+            return .result(dialog: "Could not parse the clipboard data.")
+        }
+    }
+}
+
+struct ClashDashShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: ImportVillageDataIntent(),
+            phrases: ["Import village data in \(.applicationName)"],
+            shortTitle: "Import Village Data",
+            systemImageName: "square.and.arrow.down"
+        )
+    }
+}
