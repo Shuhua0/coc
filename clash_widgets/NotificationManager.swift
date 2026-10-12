@@ -56,7 +56,19 @@ final class NotificationManager: ObservableObject {
         upgradeSyncRevision += 1
         let revision = upgradeSyncRevision
         // Capture ownership and alert content before asynchronous permission checks.
-        let desired = requests.map { makeRequest(for: $0) }
+        // Badge: the Nth notification to fire shows N on the app icon (cleared when the app opens).
+        let desired: [UNNotificationRequest] = requests
+            .map { makeRequest(for: $0) }
+            .sorted {
+                (($0.trigger as? UNTimeIntervalNotificationTrigger)?.timeInterval ?? 0)
+                    < (($1.trigger as? UNTimeIntervalNotificationTrigger)?.timeInterval ?? 0)
+            }
+            .enumerated()
+            .map { index, request in
+                let content = (request.content.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
+                content.badge = NSNumber(value: index + 1)
+                return UNNotificationRequest(identifier: request.identifier, content: content, trigger: request.trigger)
+            }
         ensureAuthorization(promptIfNeeded: false) { granted in
             guard revision == self.upgradeSyncRevision else { return }
             guard granted else { return }
@@ -73,6 +85,7 @@ final class NotificationManager: ObservableObject {
                         let newDate = (request.trigger as? UNTimeIntervalNotificationTrigger)?.nextTriggerDate()
                         let dateChanged = oldDate == nil || newDate == nil || abs(oldDate!.timeIntervalSince(newDate!)) > 2
                         if previous?.content.body != request.content.body
+                            || previous?.content.badge != request.content.badge
                             || !(NSDictionary(dictionary: previous?.content.userInfo ?? [:]).isEqual(to: request.content.userInfo))
                             || dateChanged {
                             self.center.add(request)

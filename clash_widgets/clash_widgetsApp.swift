@@ -107,6 +107,12 @@ struct ClashboardApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     // Also refresh when app comes to foreground normally
                     WidgetCenter.shared.reloadAllTimelines()
+                    // Clear the icon badge once the user opens the app
+                    if #available(iOS 16.0, *) {
+                        UNUserNotificationCenter.current().setBadgeCount(0)
+                    } else {
+                        UIApplication.shared.applicationIconBadgeNumber = 0
+                    }
                 }
         }
     }
