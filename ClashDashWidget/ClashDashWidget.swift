@@ -3336,7 +3336,9 @@ struct CombinedLavenderWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
             CombinedWidgetEntryView(entry: entry, layout: .labPetHelper, style: .lavender)
-                .containerBackground(CombinedStyle.lavender.background ?? .clear, for: .widget)
+                .containerBackground(for: .widget) {
+                    CombinedStyle.lavender.background ?? Color.clear
+                }
         }
         .configurationDisplayName("Overview (Lavender)")
         .description("Overview widget on a lavender background. Choose a profile or use the last opened one.")
@@ -3351,7 +3353,9 @@ struct CombinedFullLavenderWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
             CombinedWidgetEntryView(entry: entry, layout: .labPetHelperBuilderBase, style: .lavender)
-                .containerBackground(CombinedStyle.lavender.background ?? .clear, for: .widget)
+                .containerBackground(for: .widget) {
+                    CombinedStyle.lavender.background ?? Color.clear
+                }
         }
         .configurationDisplayName("Overview + Builder Base (Lavender)")
         .description("Overview + Builder Base widget on a lavender background with your nickname.")
