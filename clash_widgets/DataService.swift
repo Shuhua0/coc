@@ -522,9 +522,9 @@ class DataService: ObservableObject {
 
     private func helperDisplayName(for id: Int) -> String {
         switch id {
-        case 93000000: return "Builder's Apprentice"
-        case 93000001: return "Lab Assistant"
-        case 93000002: return "Alchemist"
+        case 93000000: return "견습 장인"
+        case 93000001: return "연구소 조수"
+        case 93000002: return "연금술사"
         default: return "Helper"
         }
     }
@@ -1543,7 +1543,7 @@ class DataService: ObservableObject {
             let helperNames = readyHelpers.map { helperDisplayName(for: $0.id) }.joined(separator: ", ")
             let identifier = "com.zacharybuschmann.clashdash.helper.\(profile.id.uuidString).consolidated"
             let title = "Helpers ready to work"
-            let body = readyHelpers.count == 1 ? "\(helperNames) is ready to work." : "\(helperNames) are ready to work."
+            let body = "\(helperNames) 준비 완료"
             let profileName: String? = {
                 let resolved = [profile.displayName, profile.cachedProfile?.name]
                     .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }

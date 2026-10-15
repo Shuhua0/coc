@@ -234,7 +234,7 @@ final class NotificationManager: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "Upgrade Complete"
         
-        var bodyText = "\(upgrade.name) finished upgrading to level \(upgrade.targetLevel)."
+        var bodyText = "\(koName(upgrade.name)) \(upgrade.targetLevel) 완료"
         
         bodyText = "\(request.profileName): \(bodyText)"
         content.body = bodyText

@@ -997,11 +997,11 @@ struct DashboardView: View {
         let mapped = rawHelpers.compactMap { helper -> HelperCooldownDisplay? in
             switch helper.id {
             case 93000000:
-                return HelperCooldownDisplay(id: helper.id, name: "Builder's Apprentice", iconName: "profile/apprentice_builder", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
+                return HelperCooldownDisplay(id: helper.id, name: "견습 장인", iconName: "profile/apprentice_builder", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
             case 93000001:
-                return HelperCooldownDisplay(id: helper.id, name: "Lab Assistant", iconName: "profile/lab_assistant", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
+                return HelperCooldownDisplay(id: helper.id, name: "연구소 조수", iconName: "profile/lab_assistant", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
             case 93000002:
-                return HelperCooldownDisplay(id: helper.id, name: "Alchemist", iconName: "profile/alchemist", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
+                return HelperCooldownDisplay(id: helper.id, name: "연금술사", iconName: "profile/alchemist", level: helper.level, cooldownSeconds: helper.cooldownSeconds, expiresAt: helper.expiresAt)
             default:
                 return nil
             }

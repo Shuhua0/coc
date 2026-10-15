@@ -614,7 +614,7 @@ struct ClashDashWidgetEntryView : View {
 
                 // Name spans full width at top
                 HStack(spacing: 2) {
-                    Text(upgrade.name)
+                    Text(koName(upgrade.name))
                         .font(.system(size: 10, weight: .semibold))
                         .lineLimit(1)
                     if upgrade.showsSuperchargeIcon {
@@ -879,7 +879,7 @@ struct ClosestUpgradeWidgetEntryView: View {
                     Text(entry.typeLabel)
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                    Text(upgrade.name)
+                    Text(koName(upgrade.name))
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                     Text(formatBoostedTimeRemaining(for: upgrade, activeBoosts: entry.activeBoosts))
@@ -1627,11 +1627,11 @@ struct HelperCooldownProvider: AppIntentTimelineProvider {
 
             switch helper.data {
             case 93000000:
-                return HelperCooldownStatus(id: helper.data, name: "Builder's Apprentice", iconName: "profile/apprentice_builder", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
+                return HelperCooldownStatus(id: helper.data, name: "견습 장인", iconName: "profile/apprentice_builder", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
             case 93000001:
-                return HelperCooldownStatus(id: helper.data, name: "Lab Assistant", iconName: "profile/lab_assistant", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
+                return HelperCooldownStatus(id: helper.data, name: "연구소 조수", iconName: "profile/lab_assistant", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
             case 93000002:
-                return HelperCooldownStatus(id: helper.data, name: "Alchemist", iconName: "profile/alchemist", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
+                return HelperCooldownStatus(id: helper.data, name: "연금술사", iconName: "profile/alchemist", level: helper.lvl, cooldownSeconds: remaining, expiresAt: expiresAt)
             default:
                 return nil
             }
@@ -1641,9 +1641,9 @@ struct HelperCooldownProvider: AppIntentTimelineProvider {
 
     private func placeholderHelpers() -> [HelperCooldownStatus] {
         [
-            HelperCooldownStatus(id: 93000000, name: "Builder's Apprentice", iconName: "profile/apprentice_builder", level: 1, cooldownSeconds: 0, expiresAt: nil),
-            HelperCooldownStatus(id: 93000001, name: "Lab Assistant", iconName: "profile/lab_assistant", level: 1, cooldownSeconds: 0, expiresAt: nil),
-            HelperCooldownStatus(id: 93000002, name: "Alchemist", iconName: "profile/alchemist", level: 1, cooldownSeconds: 0, expiresAt: nil)
+            HelperCooldownStatus(id: 93000000, name: "견습 장인", iconName: "profile/apprentice_builder", level: 1, cooldownSeconds: 0, expiresAt: nil),
+            HelperCooldownStatus(id: 93000001, name: "연구소 조수", iconName: "profile/lab_assistant", level: 1, cooldownSeconds: 0, expiresAt: nil),
+            HelperCooldownStatus(id: 93000002, name: "연금술사", iconName: "profile/alchemist", level: 1, cooldownSeconds: 0, expiresAt: nil)
         ]
     }
 
@@ -1701,7 +1701,7 @@ struct HelperCooldownWidgetEntryView: View {
                 Spacer()
             }
 
-            Text("Helper's Hut")
+            Text("도우미 오두막")
                 .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
 
@@ -2266,7 +2266,7 @@ struct LabPetWidgetEntryView: View {
                         .frame(width: 22, height: 22)
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 3) {
-                            Text(upgrade.name)
+                            Text(koName(upgrade.name))
                                 .font(.system(size: 11, weight: .semibold))
                                 .lineLimit(1)
                             if upgrade.showsSuperchargeIcon {
@@ -2559,7 +2559,7 @@ struct BuilderBaseWidgetEntryView: View {
                         .frame(width: 18, height: 18)
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 3) {
-                            Text(upgrade.name)
+                            Text(koName(upgrade.name))
                                 .font(.system(size: 11, weight: .semibold))
                                 .lineLimit(1)
                             if upgrade.showsSuperchargeIcon {
@@ -2958,7 +2958,7 @@ private struct CombinedUpgradeRow: View {
                 .scaledToFit()
                 .frame(width: rowHeight - 1, height: rowHeight - 1)
 
-            Text(upgrade.name)
+            Text(koName(upgrade.name))
                 .font(.system(size: 10, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -3191,7 +3191,7 @@ struct CombinedWidgetEntryView: View {
 
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
-                Text("Helper's Hut")
+                Text("도우미 오두막")
                     .font(.system(size: 10, weight: .bold))
                     .lineLimit(1)
                 Spacer(minLength: 2)

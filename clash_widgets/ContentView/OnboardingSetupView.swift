@@ -473,15 +473,15 @@ private struct ProfileSetupPane: View {
 
             if seedFromExistingProfile {
                 if labAssistantMaxLevel > 0 {
-                    sliderRow(title: "Lab Assistant", value: $labAssistantLevel, maxLevel: labAssistantMaxLevel, unlockedAt: 9, iconName: "profile/lab_assistant")
+                    sliderRow(title: "연구소 조수", value: $labAssistantLevel, maxLevel: labAssistantMaxLevel, unlockedAt: 9, iconName: "profile/lab_assistant")
                 }
 
                 if builderApprenticeMaxLevel > 0 {
-                    sliderRow(title: "Builder's Apprentice", value: $builderApprenticeLevel, maxLevel: builderApprenticeMaxLevel, unlockedAt: 10, iconName: "profile/apprentice_builder")
+                    sliderRow(title: "견습 장인", value: $builderApprenticeLevel, maxLevel: builderApprenticeMaxLevel, unlockedAt: 10, iconName: "profile/apprentice_builder")
                 }
 
                 if alchemistMaxLevel > 0 {
-                    sliderRow(title: "Alchemist", value: $alchemistLevel, maxLevel: alchemistMaxLevel, unlockedAt: 11, iconName: "profile/alchemist")
+                    sliderRow(title: "연금술사", value: $alchemistLevel, maxLevel: alchemistMaxLevel, unlockedAt: 11, iconName: "profile/alchemist")
                 }
             }
         }

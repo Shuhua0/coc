@@ -379,7 +379,7 @@ struct BoostView: View {
                                     
                                     if let upgradeId = boost.targetUpgradeId,
                                        let upgrade = dataService.currentProfile?.activeUpgrades.first(where: { $0.id == upgradeId }) {
-                                        Text("(\(upgrade.name))")
+                                        Text("(\(koName(upgrade.name)))")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                             .lineLimit(1)
@@ -805,7 +805,7 @@ private struct BuilderSelectionView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(upgrade.name)
+                                Text(koName(upgrade.name))
                                     .font(.body)
                                     .foregroundColor(.primary)
                                 Text("Builder #\(index + 1)")
@@ -858,7 +858,7 @@ private struct BuilderSelectionView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(upgrade.name)
+                                Text(koName(upgrade.name))
                                     .font(.body)
                                     .foregroundColor(.primary)
                                 Text("Lab Upgrade")

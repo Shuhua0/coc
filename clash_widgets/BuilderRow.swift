@@ -131,7 +131,7 @@ struct BuilderRow: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(AppAssetResolver.shared.displayName(for: upgrade))
+                    Text(koName(AppAssetResolver.shared.displayName(for: upgrade)))
                         .font(.headline)
                         .lineLimit(1)
                     if upgrade.showsSuperchargeIcon {

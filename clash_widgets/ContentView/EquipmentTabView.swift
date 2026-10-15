@@ -372,7 +372,7 @@ private struct EquipmentRow: View {
                     .padding(6)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(.tertiarySystemBackground)))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.name)
+                    Text(koName(entry.name))
                         .font(.headline)
                     Text(entry.hero)
                         .font(.caption)
@@ -435,7 +435,7 @@ private struct HeroSectionHeader: View {
                 .frame(width: 28, height: 28)
                 .padding(4)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemBackground)))
-            Text(heroName)
+            Text(koName(heroName))
                 .font(.headline)
         }
         .padding(.vertical, 4)
@@ -868,7 +868,7 @@ private struct EquipmentVisibilitySheet: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.name)
+                    Text(koName(entry.name))
                         .foregroundColor(.primary)
                 }
 

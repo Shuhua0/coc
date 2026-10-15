@@ -581,15 +581,15 @@ struct ProfileDetailView: View {
                 }
 
                 if labAssistantMaxLevel > 0 {
-                    LevelSliderRow(title: "Lab Assistant", value: $dataService.labAssistantLevel, maxLevel: labAssistantMaxLevel, iconName: "profile/lab_assistant")
+                    LevelSliderRow(title: "연구소 조수", value: $dataService.labAssistantLevel, maxLevel: labAssistantMaxLevel, iconName: "profile/lab_assistant")
                 }
 
                 if builderApprenticeMaxLevel > 0 {
-                    LevelSliderRow(title: "Builder's Apprentice", value: $dataService.builderApprenticeLevel, maxLevel: builderApprenticeMaxLevel, iconName: "profile/apprentice_builder")
+                    LevelSliderRow(title: "견습 장인", value: $dataService.builderApprenticeLevel, maxLevel: builderApprenticeMaxLevel, iconName: "profile/apprentice_builder")
                 }
 
                 if alchemistMaxLevel > 0 {
-                    LevelSliderRow(title: "Alchemist", value: $dataService.alchemistLevel, maxLevel: alchemistMaxLevel, iconName: "profile/alchemist")
+                    LevelSliderRow(title: "연금술사", value: $dataService.alchemistLevel, maxLevel: alchemistMaxLevel, iconName: "profile/alchemist")
                 }
 
                 Toggle(isOn: $dataService.widgetTapRefresh) {
@@ -690,7 +690,7 @@ struct ProfileDetailView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 32, height: 32)
-                                    Text(helper.displayName)
+                                    Text(koName(helper.displayName))
                                         .font(.subheadline)
                                         .fontWeight(.semibold)
                                     Spacer()
@@ -894,7 +894,7 @@ struct ProfileDetailView: View {
                                 .frame(width: 32, height: 32)
                         }
                         VStack(alignment: .leading) {
-                            Text(hero.name)
+                            Text(koName(hero.name))
                                 .font(.subheadline)
                             Text("Level \(hero.level) / \(actualMaxLevel)")
                                 .font(.caption)

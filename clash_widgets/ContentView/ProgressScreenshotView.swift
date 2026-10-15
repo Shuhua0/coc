@@ -433,7 +433,7 @@ struct ProgressExportPreviewView: View {
         .overlay(shape.stroke(Color.white.opacity(selectedBackground.isEmpty ? 0.09 : 0.3), lineWidth: 1))
         .clipShape(shape)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(entry.name), \(entry.level == 0 ? "locked" : "level \(entry.level)")")
+        .accessibilityLabel("\(koName(entry.name)), \(entry.level == 0 ? "locked" : "level \(entry.level)")")
     }
 
     private func levelBadge(_ entry: Entry, size: CGFloat) -> some View {

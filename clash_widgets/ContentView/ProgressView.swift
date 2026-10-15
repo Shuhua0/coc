@@ -429,7 +429,7 @@ struct ProgressTabView: View {
                 .progressStructureIconStyle(colorScheme)
                 .modifier(ProgressLevelPopover(item: item, townHall: townHall))
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.name).font(.subheadline.weight(.medium))
+                Text(koName(item.name)).font(.subheadline.weight(.medium))
                 if counts.isEmpty {
                     Text("None of this building to upgrade").font(.caption).foregroundColor(.secondary)
                 } else {
@@ -453,7 +453,7 @@ struct ProgressTabView: View {
                 .progressStructureIconStyle(colorScheme)
                 .modifier(ProgressLevelPopover(item: item, townHall: townHall))
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.name).font(.subheadline.weight(.medium))
+                Text(koName(item.name)).font(.subheadline.weight(.medium))
                 levelLine(level, count: count, item: item)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -557,7 +557,7 @@ struct ProgressTabView: View {
                 .opacity(counts.isEmpty ? 0.35 : 1)
                 .progressStructureIconStyle(colorScheme)
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.name).font(.subheadline.weight(.medium))
+                Text(koName(item.name)).font(.subheadline.weight(.medium))
                 if counts.isEmpty {
                     Text("Max this building to unlock").font(.caption).foregroundColor(.secondary)
                 } else {
@@ -591,7 +591,7 @@ struct ProgressTabView: View {
                 .opacity(modules.isEmpty ? 0.35 : 1)
                 .progressStructureIconStyle(colorScheme)
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.name).font(.subheadline.weight(.medium))
+                Text(koName(item.name)).font(.subheadline.weight(.medium))
                 if modules.isEmpty {
                     Text("None of this building to upgrade").font(.caption).foregroundColor(.secondary)
                 } else {
@@ -638,7 +638,7 @@ struct ProgressTabView: View {
                 .frame(minWidth: 28).padding(.horizontal, 4).padding(.vertical, 2)
                 .background(fill, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(edge, lineWidth: 1.5))
-            Text(item.name).font(.system(size: 10)).lineLimit(2)
+            Text(koName(item.name)).font(.system(size: 10)).lineLimit(2)
                 .multilineTextAlignment(.center).frame(height: 26, alignment: .top)
         }
         .frame(maxWidth: .infinity)
@@ -688,12 +688,12 @@ struct ProgressTabView: View {
                 .frame(minWidth: 28).padding(.horizontal, 4).padding(.vertical, 2)
                 .background(badgeFill, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(badgeEdge, lineWidth: 1.5))
-            Text(item.name).font(.system(size: 10)).lineLimit(2)
+            Text(koName(item.name)).font(.system(size: 10)).lineLimit(2)
                 .multilineTextAlignment(.center).frame(height: 26, alignment: .top)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(item.name), \(item.rarity.label), \(level == 0 ? "not unlocked" : "level \(level)"), overall max \(item.rarity.maxLevel)\(isMax ? ", overall maximum reached" : "")")
+        .accessibilityLabel("\(koName(item.name)), \(item.rarity.label), \(level == 0 ? "not unlocked" : "level \(level)"), overall max \(item.rarity.maxLevel)\(isMax ? ", overall maximum reached" : "")")
     }
 }
 
@@ -944,11 +944,11 @@ private struct ProgressLevelPopover: ViewModifier {
                         }
                 }
             }
-            .accessibilityLabel("\(item.name), show maximum levels")
+            .accessibilityLabel("\(koName(item.name)), show maximum levels")
             .accessibilityAddTraits(.isButton)
             .popover(isPresented: $isPresented, arrowEdge: arrowEdge) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(item.name).font(.headline)
+                    Text(koName(item.name)).font(.headline)
                     let townHallMax = item.maxLevel(at: townHall)
                     Text("Town Hall \(townHall) max: \(townHallMax > 0 ? String(townHallMax) : "Not available")")
                     Text("Overall max: \(item.levels.map(\.level).max() ?? 0)")
