@@ -19,6 +19,8 @@ struct ClashDashWidgetBundle: WidgetBundle {
         ClosestUpgradeWidget()
         CombinedWidget()
         CombinedFullWidget()
+        CombinedLavenderWidget()
+        CombinedFullLavenderWidget()
         // WarStatusWidget()  // Hidden for now
         // WarStatusSmallWidget()  // Hidden for now
         // ClanWarWidget()  // Hidden for now

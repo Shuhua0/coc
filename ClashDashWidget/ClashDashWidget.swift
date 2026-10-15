@@ -2949,6 +2949,31 @@ struct CombinedProvider: AppIntentTimelineProvider {
     }
 }
 
+/// Color schemes for the combined widgets.
+/// standard: widgets 6/7 (system background). lavender: widgets 8/9 (#E6E6FA background).
+enum CombinedStyle {
+    case standard
+    case lavender
+
+    private static let lavenderBackground = Color(red: 230.0 / 255.0, green: 230.0 / 255.0, blue: 250.0 / 255.0)
+    private static let ink = Color(red: 30.0 / 255.0, green: 27.0 / 255.0, blue: 75.0 / 255.0)
+    private static let darkOrange = Color(red: 154.0 / 255.0, green: 59.0 / 255.0, blue: 0.0)
+    private static let darkGreen = Color(red: 22.0 / 255.0, green: 101.0 / 255.0, blue: 52.0 / 255.0)
+
+    var isLavender: Bool { self == .lavender }
+    var background: Color? { isLavender ? Self.lavenderBackground : nil }
+    /// "Builders", "Lab & Pets", "Builder Base"
+    var sectionTitleColor: Color { isLavender ? Self.ink : Self.lavenderBackground }
+    /// Upgrade names, helper's hut name, nickname
+    var nameColor: Color { isLavender ? Self.ink : .primary }
+    var nicknameColor: Color { isLavender ? Self.ink : .secondary }
+    var timerColor: Color { isLavender ? Self.darkOrange : .orange }
+    /// "Complete" and "{n} free"
+    var doneColor: Color { isLavender ? Self.darkGreen : .green }
+    var emptyLabelColor: Color { isLavender ? Self.darkGreen : Color.green.opacity(0.7) }
+    var noDataColor: Color { isLavender ? Self.ink.opacity(0.6) : .secondary }
+}
+
 private struct CombinedProgressBar: View {
     let fraction: Double
     var height: CGFloat = 2
@@ -2973,8 +2998,10 @@ private struct CombinedUpgradeRow: View {
     let goldPassBoost: Int
     var referenceDate: Date = Date()
     var rowHeight: CGFloat = 17
+    var style: CombinedStyle = .standard
 
     var body: some View {
+        let isDone = effectiveRemainingSeconds(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate) <= 0
         HStack(spacing: 5) {
             trimmedWidgetImage(named: widgetIconName(for: upgrade))
                 .interpolation(.none)
@@ -2985,6 +3012,7 @@ private struct CombinedUpgradeRow: View {
 
             Text(koName(upgrade.name))
                 .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(style.nameColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
 
@@ -2992,14 +3020,15 @@ private struct CombinedUpgradeRow: View {
 
             LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate, alignment: .trailing)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.orange)
+                .foregroundColor(isDone ? style.doneColor : style.timerColor)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
         .frame(height: rowHeight)
         .overlay(alignment: .bottom) {
             CombinedProgressBar(
-                fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost, referenceDate: referenceDate)
+                fraction: boostedProgressFraction(for: upgrade, activeBoosts: activeBoosts, goldPassBoost: goldPassBoost, referenceDate: referenceDate),
+                tint: style.isLavender ? style.doneColor : .green
             )
         }
     }
@@ -3008,16 +3037,17 @@ private struct CombinedUpgradeRow: View {
 private struct CombinedEmptyRow: View {
     let label: String
     var rowHeight: CGFloat = 17
+    var style: CombinedStyle = .standard
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 12))
-                .foregroundColor(.green.opacity(0.7))
+                .foregroundColor(style.emptyLabelColor)
                 .frame(width: rowHeight - 1, height: rowHeight - 1)
             Text(label)
                 .font(.system(size: 10))
-                .foregroundColor(.green.opacity(0.7))
+                .foregroundColor(style.emptyLabelColor)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -3029,18 +3059,22 @@ private struct CombinedSectionHeader: View {
     let title: String
     let status: String
     let allBusy: Bool
+    var style: CombinedStyle = .standard
 
     var body: some View {
         HStack(spacing: 4) {
             Text(title)
                 .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.primary)
+                .foregroundColor(style.sectionTitleColor)
                 .lineLimit(1)
             Spacer(minLength: 2)
-            Text(status)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(allBusy ? .green : .orange)
-                .lineLimit(1)
+            // "All busy" is hidden; only "{n} free" is shown.
+            if !allBusy {
+                Text(status)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(style.doneColor)
+                    .lineLimit(1)
+            }
         }
     }
 }
@@ -3056,15 +3090,17 @@ enum CombinedLayout {
 struct CombinedWidgetEntryView: View {
     var entry: CombinedWidgetEntry
     var layout: CombinedLayout = .labPetHelper
+    var style: CombinedStyle = .standard
 
     private var isFull: Bool { layout == .labPetHelperBuilderBase }
     private var rightRowHeight: CGFloat { isFull ? 14 : 17 }
-    private var leftRowHeight: CGFloat { isFull ? 14 : 17 }
+    // Nickname now sits at the bottom center in both layouts, so 6 builders need slightly shorter rows.
+    private var leftRowHeight: CGFloat { isFull ? 14 : (homeSlots >= 6 ? 15 : 17) }
     private var homeSlots: Int { max(min(entry.home.builderCount, 6), 0) }
     private var labPetSlots: Int { 2 }
 
     var body: some View {
-        VStack(spacing: isFull ? 3 : 0) {
+        VStack(spacing: 3) {
             HStack(alignment: .top, spacing: 8) {
                 homeColumn
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -3082,27 +3118,21 @@ struct CombinedWidgetEntryView: View {
                         helperSection()
                     }
                     Spacer(minLength: 0)
-                    if !isFull, !entry.home.profileName.isEmpty {
-                        Text(entry.home.profileName)
-                            .font(.system(size: 8))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
 
-            if isFull, !entry.home.profileName.isEmpty {
+            if !entry.home.profileName.isEmpty {
                 Text(entry.home.profileName)
                     .font(.system(size: 8))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(style.nicknameColor)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, isFull ? 10 : 12)
-        .padding(.bottom, isFull ? 8 : 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         .widgetTapAction(refresh: entry.tapToRefresh)
     }
 
@@ -3116,7 +3146,8 @@ struct CombinedWidgetEntryView: View {
             CombinedSectionHeader(
                 title: "Builders",
                 status: allBusy ? "All busy" : "\(free) free",
-                allBusy: allBusy
+                allBusy: allBusy,
+                style: style
             )
             ForEach(0..<homeSlots, id: \.self) { index in
                 if index < entry.home.upgrades.count {
@@ -3125,10 +3156,11 @@ struct CombinedWidgetEntryView: View {
                         activeBoosts: entry.home.activeBoosts,
                         goldPassBoost: entry.home.goldPassBoost,
                         referenceDate: entry.date,
-                        rowHeight: leftRowHeight
+                        rowHeight: leftRowHeight,
+                        style: style
                     )
                 } else {
-                    CombinedEmptyRow(label: "Builder \(index + 1) available", rowHeight: leftRowHeight)
+                    CombinedEmptyRow(label: "Builder \(index + 1) available", rowHeight: leftRowHeight, style: style)
                 }
             }
             Spacer(minLength: 0)
@@ -3148,7 +3180,8 @@ struct CombinedWidgetEntryView: View {
             CombinedSectionHeader(
                 title: "Lab & Pets",
                 status: allBusy ? "All busy" : "\(free) free",
-                allBusy: allBusy
+                allBusy: allBusy,
+                style: style
             )
             ForEach(0..<labPetSlots, id: \.self) { index in
                 if index < entry.labPet.upgrades.count {
@@ -3157,10 +3190,11 @@ struct CombinedWidgetEntryView: View {
                         activeBoosts: entry.labPet.activeBoosts,
                         goldPassBoost: entry.labPet.goldPassBoost,
                         referenceDate: entry.date,
-                        rowHeight: rightRowHeight
+                        rowHeight: rightRowHeight,
+                        style: style
                     )
                 } else {
-                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
                 }
             }
         }
@@ -3180,7 +3214,8 @@ struct CombinedWidgetEntryView: View {
             CombinedSectionHeader(
                 title: "Builder Base",
                 status: allBusy ? "All busy" : "\(free) free",
-                allBusy: allBusy
+                allBusy: allBusy,
+                style: style
             )
             ForEach(0..<builderSlots, id: \.self) { index in
                 if index < builderUpgrades.count {
@@ -3189,10 +3224,11 @@ struct CombinedWidgetEntryView: View {
                         activeBoosts: entry.builderBase.activeBoosts,
                         goldPassBoost: entry.builderBase.goldPassBoost,
                         referenceDate: entry.date,
-                        rowHeight: rightRowHeight
+                        rowHeight: rightRowHeight,
+                        style: style
                     )
                 } else {
-                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
                 }
             }
             if hallUnlocked {
@@ -3202,10 +3238,11 @@ struct CombinedWidgetEntryView: View {
                         activeBoosts: entry.builderBase.activeBoosts,
                         goldPassBoost: entry.builderBase.goldPassBoost,
                         referenceDate: entry.date,
-                        rowHeight: rightRowHeight
+                        rowHeight: rightRowHeight,
+                        style: style
                     )
                 } else {
-                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
                 }
             }
         }
@@ -3227,7 +3264,7 @@ struct CombinedWidgetEntryView: View {
             if minutes > 0 { return "\(minutes)m \(seconds)s" }
             return "\(seconds)s"
         }()
-        let statusColor: Color = !hasData ? .secondary : (remaining > 0 ? .orange : .green)
+        let statusColor: Color = !hasData ? style.noDataColor : (remaining > 0 ? style.timerColor : style.doneColor)
         let helperEnd = entry.helpers.helpers.compactMap { $0.expiresAt }.max() ?? Date.distantPast
         let helperRowHeight = isFull ? leftRowHeight : rightRowHeight
 
@@ -3241,6 +3278,7 @@ struct CombinedWidgetEntryView: View {
                     .frame(width: helperRowHeight - 1, height: helperRowHeight - 1)
                 Text("도우미 오두막")
                     .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(style.nameColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 2)
@@ -3256,7 +3294,7 @@ struct CombinedWidgetEntryView: View {
                     .lineLimit(1)
             }
             .frame(height: helperRowHeight)
-            CombinedProgressBar(fraction: hasData ? progress : 0)
+            CombinedProgressBar(fraction: hasData ? progress : 0, tint: style.isLavender ? style.doneColor : .green)
         }
     }
 }
@@ -3287,6 +3325,36 @@ struct CombinedFullWidget: Widget {
         }
         .configurationDisplayName("Overview + Builder Base")
         .description("Builders, Lab & Pets, Helper's Hut and Builder Base with your nickname.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+/// Widget 8: same as widget 6 (Overview) with a #E6E6FA background and high-contrast text colors
+struct CombinedLavenderWidget: Widget {
+    let kind: String = "CombinedLavenderWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
+            CombinedWidgetEntryView(entry: entry, layout: .labPetHelper, style: .lavender)
+                .containerBackground(CombinedStyle.lavender.background ?? .clear, for: .widget)
+        }
+        .configurationDisplayName("Overview (Lavender)")
+        .description("Overview widget on a lavender background. Choose a profile or use the last opened one.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+/// Widget 9: same as widget 7 (Overview + Builder Base) with a #E6E6FA background and high-contrast text colors
+struct CombinedFullLavenderWidget: Widget {
+    let kind: String = "CombinedFullLavenderWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: WidgetProfileIntent.self, provider: CombinedProvider()) { entry in
+            CombinedWidgetEntryView(entry: entry, layout: .labPetHelperBuilderBase, style: .lavender)
+                .containerBackground(CombinedStyle.lavender.background ?? .clear, for: .widget)
+        }
+        .configurationDisplayName("Overview + Builder Base (Lavender)")
+        .description("Overview + Builder Base widget on a lavender background with your nickname.")
         .supportedFamilies([.systemMedium])
     }
 }
