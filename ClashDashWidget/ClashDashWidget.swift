@@ -3121,6 +3121,9 @@ struct CombinedWidgetEntryView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            // Fill the full widget height so the center divider and the nickname sit at the same
+            // position in every layout (widgets 6-9), regardless of how much content each one has.
+            .frame(maxHeight: .infinity, alignment: .top)
 
             if !entry.home.profileName.isEmpty {
                 Text(entry.home.profileName)
