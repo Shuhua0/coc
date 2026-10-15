@@ -2848,6 +2848,7 @@ struct CombinedWidgetEntry: TimelineEntry {
     let helpers: HelperCooldownWidgetEntry
     let tapToRefresh: Bool
     let nickname: String
+    var bedtime: BedtimeSettings = BedtimeSettings.load()
 }
 
 struct CombinedProvider: AppIntentTimelineProvider {
@@ -2888,7 +2889,8 @@ struct CombinedProvider: AppIntentTimelineProvider {
                     builderBase: entry.builderBase,
                     helpers: entry.helpers,
                     tapToRefresh: entry.tapToRefresh,
-                    nickname: entry.nickname
+                    nickname: entry.nickname,
+                    bedtime: entry.bedtime
                 )
             }
             return Timeline(entries: entries, policy: .after(last))
@@ -2972,6 +2974,13 @@ enum CombinedStyle {
     var doneColor: Color { isLavender ? Self.darkGreen : .green }
     var emptyLabelColor: Color { isLavender ? Self.darkGreen : Color.green.opacity(0.7) }
     var noDataColor: Color { isLavender ? Self.ink.opacity(0.6) : .secondary }
+    /// Moon icon for upgrades that finish during bedtime
+    var moonColor: Color {
+        isLavender
+            ? Color(red: 67.0 / 255.0, green: 56.0 / 255.0, blue: 202.0 / 255.0)
+            : Color(red: 139.0 / 255.0, green: 124.0 / 255.0, blue: 246.0 / 255.0)
+    }
+    var dividerColor: Color { Color.gray.opacity(isLavender ? 0.5 : 0.35) }
 }
 
 private struct CombinedProgressBar: View {
@@ -2999,8 +3008,11 @@ private struct CombinedUpgradeRow: View {
     var referenceDate: Date = Date()
     var rowHeight: CGFloat = 17
     var style: CombinedStyle = .standard
+    var bedtime: BedtimeSettings = BedtimeSettings()
 
     var body: some View {
+        let completion = effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate)
+        let finishesDuringBedtime = bedtime.contains(completion)
         let isDone = effectiveRemainingSeconds(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate) <= 0
         HStack(spacing: 5) {
             trimmedWidgetImage(named: widgetIconName(for: upgrade))
@@ -3017,6 +3029,12 @@ private struct CombinedUpgradeRow: View {
                 .minimumScaleFactor(0.8)
 
             Spacer(minLength: 2)
+
+            if finishesDuringBedtime && !isDone {
+                Image(systemName: "moon.fill")
+                    .font(.system(size: 8))
+                    .foregroundColor(style.moonColor)
+            }
 
             LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate, alignment: .trailing)
                 .font(.system(size: 9, weight: .medium))
@@ -3160,7 +3178,8 @@ struct CombinedWidgetEntryView: View {
                         goldPassBoost: entry.home.goldPassBoost,
                         referenceDate: entry.date,
                         rowHeight: leftRowHeight,
-                        style: style
+                        style: style,
+                        bedtime: entry.bedtime
                     )
                 } else {
                     CombinedEmptyRow(label: "Builder \(index + 1) available", rowHeight: leftRowHeight, style: style)
@@ -3194,7 +3213,8 @@ struct CombinedWidgetEntryView: View {
                         goldPassBoost: entry.labPet.goldPassBoost,
                         referenceDate: entry.date,
                         rowHeight: rightRowHeight,
-                        style: style
+                        style: style,
+                        bedtime: entry.bedtime
                     )
                 } else {
                     CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
@@ -3228,7 +3248,8 @@ struct CombinedWidgetEntryView: View {
                         goldPassBoost: entry.builderBase.goldPassBoost,
                         referenceDate: entry.date,
                         rowHeight: rightRowHeight,
-                        style: style
+                        style: style,
+                        bedtime: entry.bedtime
                     )
                 } else {
                     CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
@@ -3242,7 +3263,8 @@ struct CombinedWidgetEntryView: View {
                         goldPassBoost: entry.builderBase.goldPassBoost,
                         referenceDate: entry.date,
                         rowHeight: rightRowHeight,
-                        style: style
+                        style: style,
+                        bedtime: entry.bedtime
                     )
                 } else {
                     CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight, style: style)
@@ -3251,7 +3273,7 @@ struct CombinedWidgetEntryView: View {
         }
     }
 
-    // MARK: Helper's Hut
+    // MARK: Helper's Hut (same icon / font / row height as the other rows, separated by a solid line above)
     private func helperSection() -> some View {
         let totalSeconds = 23 * 60 * 60
         let remaining = max(min(entry.helpers.helpers.map { $0.cooldownSeconds }.max() ?? 0, totalSeconds), 0)
@@ -3272,6 +3294,9 @@ struct CombinedWidgetEntryView: View {
         let helperRowHeight = isFull ? leftRowHeight : rightRowHeight
 
         return VStack(alignment: .leading, spacing: 2) {
+            Rectangle()
+                .fill(style.dividerColor)
+                .frame(height: 1)
             HStack(spacing: 5) {
                 trimmedWidgetImage(named: "buildings_home/helper_hut")
                     .interpolation(.none)
@@ -3280,7 +3305,7 @@ struct CombinedWidgetEntryView: View {
                     .scaledToFit()
                     .frame(width: helperRowHeight - 1, height: helperRowHeight - 1)
                 Text("도우미 오두막")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(style.nameColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -3292,12 +3317,18 @@ struct CombinedWidgetEntryView: View {
                     alignment: .trailing,
                     width: 38
                 )
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundColor(statusColor)
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .frame(height: helperRowHeight)
-            CombinedProgressBar(fraction: hasData ? progress : 0, tint: style.isLavender ? style.doneColor : .green)
+            .overlay(alignment: .bottom) {
+                CombinedProgressBar(
+                    fraction: hasData ? progress : 0,
+                    tint: style.isLavender ? style.doneColor : .green
+                )
+            }
         }
     }
 }

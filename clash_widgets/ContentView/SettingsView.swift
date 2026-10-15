@@ -1,5 +1,6 @@
 import SwiftUI
 import StoreKit
+import WidgetKit
 
 struct SettingsView: View {
     @EnvironmentObject private var dataService: DataService
@@ -17,6 +18,7 @@ struct SettingsView: View {
     @AppStorage("hasCompletedInitialSetup") private var hasCompletedInitialSetup = false
     @AppStorage("profilesSectionExpanded") private var profilesSectionExpanded = true
     @AppStorage("adsPreference") private var adsPreference: AdsPreference = .fullScreen
+    @State private var bedtime = BedtimeSettings.load()
 
     private var canCollapseProfiles: Bool {
         dataService.profiles.count >= 2
@@ -26,6 +28,15 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 profilesSection
+
+                Section {
+                    DatePicker("Start", selection: bedtimeBinding(isStart: true), displayedComponents: .hourAndMinute)
+                    DatePicker("End", selection: bedtimeBinding(isStart: false), displayedComponents: .hourAndMinute)
+                } header: {
+                    Text("Bedtime")
+                } footer: {
+                    Text("Upgrades that finish during this time get a moon icon on the Overview widgets.")
+                }
 
                 Section("Appearance") {
                     Picker("Dark Mode", selection: $dataService.appearancePreference) {
@@ -125,6 +136,26 @@ struct SettingsView: View {
                 Text(iapErrorMessage ?? "Purchase failed. Please try again later.")
             }
         }
+    }
+
+    private func bedtimeBinding(isStart: Bool) -> Binding<Date> {
+        Binding<Date>(
+            get: {
+                let minutes = isStart ? bedtime.startMinutes : bedtime.endMinutes
+                return Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
+            },
+            set: { newDate in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                let minutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+                if isStart {
+                    bedtime.startMinutes = minutes
+                } else {
+                    bedtime.endMinutes = minutes
+                }
+                bedtime.save()
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        )
     }
 
     private let feedbackFormURLString = "https://forms.gle/E7h9kETSokcZLior7"
