@@ -2403,9 +2403,9 @@ struct BuilderBaseProvider: AppIntentTimelineProvider {
         return widgetTimeline(entry: entry, upgrades: upgrades, activeBoosts: activeBoosts, fallbackNext: nextUpdate)
     }
 
-    private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int, [ActiveBoost]) {
+    private func loadUpgradesAndBoosts(for configuration: WidgetProfileIntent, maxBuilders: Int = 2) -> ([BuildingUpgrade], Int, [ActiveBoost]) {
         let (decoded, builderHallLevel, activeBoosts) = loadUpgradesBuilderHallAndBoosts(for: configuration)
-        let builderSlots = builderHallLevel >= 6 ? 2 : 1
+        let builderSlots = builderHallLevel >= 6 ? maxBuilders : 1
         let labSlots = builderHallLevel >= 6 ? 1 : 0
 
         let builderUpgrades = decoded
@@ -2418,6 +2418,13 @@ struct BuilderBaseProvider: AppIntentTimelineProvider {
         let selectedBuilders = Array(builderUpgrades.prefix(builderSlots))
         let selectedLab = Array(labUpgrades.prefix(labSlots))
         return (selectedBuilders + selectedLab, builderHallLevel, activeBoosts)
+    }
+
+    /// Overview widget 6: up to 3 builders + 1 Star Lab upgrade.
+    func overviewSnapshot(for configuration: WidgetProfileIntent) -> SimpleEntry {
+        let (upgrades, builderHallLevel, activeBoosts) = loadUpgradesAndBoosts(for: configuration, maxBuilders: 3)
+        let (profileName, _) = loadProfileInfo(for: configuration)
+        return SimpleEntry(date: Date(), upgrades: upgrades, builderCount: 5, builderHallLevel: builderHallLevel, debugText: "BuilderBase", profileName: profileName, townHallLevel: 0, activeBoosts: activeBoosts, tapToRefresh: widgetTapRefreshEnabled(for: configuration))
     }
 
     private func loadUpgrades(for configuration: WidgetProfileIntent) -> ([BuildingUpgrade], Int) {
@@ -2910,7 +2917,7 @@ struct CombinedProvider: AppIntentTimelineProvider {
     private func build(for configuration: WidgetProfileIntent, in context: Context) async -> CombinedWidgetEntry {
         let home = await Provider().snapshot(for: configuration, in: context)
         let labPet = await LabPetProvider().snapshot(for: configuration, in: context)
-        let builderBase = await BuilderBaseProvider().snapshot(for: configuration, in: context)
+        let builderBase = BuilderBaseProvider().overviewSnapshot(for: configuration)
         let helpers = await HelperCooldownProvider().snapshot(for: configuration, in: context)
         return CombinedWidgetEntry(
             date: Date(),
@@ -3033,10 +3040,9 @@ struct CombinedWidgetEntryView: View {
     var layout: CombinedLayout = .labPetHelper
 
     private var isFull: Bool { layout == .labPetHelperBuilderBase }
-    private var rightRowHeight: CGFloat { isFull ? 15 : 17 }
-    private var leftRowHeight: CGFloat { isFull ? 15 : 17 }
+    private var rightRowHeight: CGFloat { isFull ? 14 : 17 }
+    private var leftRowHeight: CGFloat { isFull ? 14 : 17 }
     private var homeSlots: Int { max(min(entry.home.builderCount, 6), 0) }
-    private var bbSlots: Int { 3 }
     private var labPetSlots: Int { 2 }
 
     var body: some View {
@@ -3142,11 +3148,15 @@ struct CombinedWidgetEntryView: View {
         }
     }
 
-    // MARK: Builder Base (widget 6 only)
+    // MARK: Builder Base (widget 6 only) - 3 builders + 1 Star Lab
     private var builderBaseSection: some View {
-        let used = entry.builderBase.upgrades.count
-        let allBusy = used >= bbSlots
-        let free = max(bbSlots - used, 0)
+        let hallUnlocked = entry.builderBase.builderHallLevel >= 6
+        let builderSlots = hallUnlocked ? 3 : 1
+        let builderUpgrades = entry.builderBase.upgrades.filter { $0.category == .builderBase }
+        let labUpgrades = entry.builderBase.upgrades.filter { $0.category == .starLab }
+        let used = min(builderUpgrades.count, builderSlots)
+        let allBusy = used >= builderSlots
+        let free = max(builderSlots - used, 0)
 
         return VStack(alignment: .leading, spacing: 2) {
             CombinedSectionHeader(
@@ -3154,10 +3164,23 @@ struct CombinedWidgetEntryView: View {
                 status: allBusy ? "All busy" : "\(free) free",
                 allBusy: allBusy
             )
-            ForEach(0..<bbSlots, id: \.self) { index in
-                if index < entry.builderBase.upgrades.count {
+            ForEach(0..<builderSlots, id: \.self) { index in
+                if index < builderUpgrades.count {
                     CombinedUpgradeRow(
-                        upgrade: entry.builderBase.upgrades[index],
+                        upgrade: builderUpgrades[index],
+                        activeBoosts: entry.builderBase.activeBoosts,
+                        goldPassBoost: entry.builderBase.goldPassBoost,
+                        referenceDate: entry.date,
+                        rowHeight: rightRowHeight
+                    )
+                } else {
+                    CombinedEmptyRow(label: "Available", rowHeight: rightRowHeight)
+                }
+            }
+            if hallUnlocked {
+                if let labUpgrade = labUpgrades.first {
+                    CombinedUpgradeRow(
+                        upgrade: labUpgrade,
                         activeBoosts: entry.builderBase.activeBoosts,
                         goldPassBoost: entry.builderBase.goldPassBoost,
                         referenceDate: entry.date,
@@ -3170,7 +3193,7 @@ struct CombinedWidgetEntryView: View {
         }
     }
 
-    // MARK: Helper's Hut - text only, no hut image
+    // MARK: Helper's Hut
     private func helperSection() -> some View {
         let totalSeconds = 23 * 60 * 60
         let remaining = max(min(entry.helpers.helpers.map { $0.cooldownSeconds }.max() ?? 0, totalSeconds), 0)
@@ -3188,12 +3211,20 @@ struct CombinedWidgetEntryView: View {
         }()
         let statusColor: Color = !hasData ? .secondary : (remaining > 0 ? .orange : .green)
         let helperEnd = entry.helpers.helpers.compactMap { $0.expiresAt }.max() ?? Date.distantPast
+        let helperRowHeight = isFull ? leftRowHeight : rightRowHeight
 
         return VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
+                trimmedWidgetImage(named: "buildings_home/helper_hut")
+                    .interpolation(.none)
+                    .resizable()
+                    .clashWidgetTintAwareRendering()
+                    .scaledToFit()
+                    .frame(width: helperRowHeight - 1, height: helperRowHeight - 1)
                 Text("도우미 오두막")
                     .font(.system(size: 10, weight: .bold))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer(minLength: 2)
                 LiveCountdownText(
                     endDate: helperEnd,
@@ -3206,6 +3237,7 @@ struct CombinedWidgetEntryView: View {
                     .foregroundColor(statusColor)
                     .lineLimit(1)
             }
+            .frame(height: helperRowHeight)
             CombinedProgressBar(fraction: hasData ? progress : 0)
         }
     }
