@@ -304,6 +304,22 @@ private func widgetNicknameLabel(for profile: PlayerAccount?) -> String {
     return tagLabel.isEmpty ? name : "\(name) (\(tagLabel))"
 }
 
+/// Nickname only (no "(#TAG)" suffix). Falls back to "#TAG" when no in-game name is known. Used by widget 10.
+private func widgetNicknameOnly(for profile: PlayerAccount?) -> String {
+    guard let profile else { return "" }
+    let tag = profile.tag
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "#", with: "")
+        .uppercased()
+    var name = (profile.cachedProfile?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if name.isEmpty {
+        name = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let nameAsTag = name.replacingOccurrences(of: "#", with: "").uppercased()
+    if name.isEmpty || nameAsTag == tag { return tag.isEmpty ? "" : "#\(tag)" }
+    return name
+}
+
 // MARK: - Widget Rendering Mode for Tinted/Clear Modes
 // Use desaturated rendering mode to prevent images from becoming solid accent color blobs
 struct SimpleEntry: TimelineEntry {
@@ -2770,6 +2786,8 @@ private struct LiveCountdownText: View {
     var referenceDate: Date = Date()
     var alignment: Alignment = .leading
     var width: CGFloat = 38
+    /// Widget 10 only: right-align the digits inside the box (Text(timerInterval:) otherwise left-aligns them).
+    var trailingText: Bool = false
 
     private var remaining: TimeInterval { endDate.timeIntervalSince(referenceDate) }
 
@@ -2779,6 +2797,7 @@ private struct LiveCountdownText: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .multilineTextAlignment(trailingText ? .trailing : .leading)
                 .frame(width: width, alignment: alignment)
         } else {
             Text(fallback)
@@ -2791,6 +2810,7 @@ private struct LiveUpgradeTimeText: View {
     let activeBoosts: [ActiveBoost]
     var referenceDate: Date = Date()
     var alignment: Alignment = .leading
+    var trailingText: Bool = false
 
     var body: some View {
         let fallback = formatBoostedTimeRemaining(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate)
@@ -2803,7 +2823,8 @@ private struct LiveUpgradeTimeText: View {
                 endDate: effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate),
                 fallback: fallback,
                 referenceDate: referenceDate,
-                alignment: alignment
+                alignment: alignment,
+                trailingText: trailingText
             )
         }
     }
@@ -3013,6 +3034,7 @@ private struct CombinedUpgradeRow: View {
     var rowHeight: CGFloat = 17
     var style: CombinedStyle = .standard
     var bedtime: BedtimeSettings = BedtimeSettings()
+    var trailingTimer: Bool = false
 
     var body: some View {
         let completion = effectiveCompletionDate(for: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate)
@@ -3040,7 +3062,7 @@ private struct CombinedUpgradeRow: View {
                     .foregroundColor(style.moonColor)
             }
 
-            LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate, alignment: .trailing)
+            LiveUpgradeTimeText(upgrade: upgrade, activeBoosts: activeBoosts, referenceDate: referenceDate, alignment: .trailing, trailingText: trailingTimer)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(isDone ? style.doneColor : style.timerColor)
                 .lineLimit(1)
@@ -3463,6 +3485,8 @@ struct DualProfileSide {
     var activeBoosts: [ActiveBoost] = []
     var goldPassBoost: Int = 0
     var lastUpdated: Date? = nil
+    /// Profile setting "Tap widget to refresh" (an empty slot has no profile, so it counts as off).
+    var tapToRefresh: Bool = false
 }
 
 struct DualProfileEntry: TimelineEntry {
@@ -3470,6 +3494,9 @@ struct DualProfileEntry: TimelineEntry {
     let left: DualProfileSide
     let right: DualProfileSide
     var bedtime: BedtimeSettings = BedtimeSettings.load()
+
+    /// Same behavior as widgets 6-9: tap refreshes in place; app opens only when no shown profile has it on.
+    var tapToRefresh: Bool { left.tapToRefresh || right.tapToRefresh }
 }
 
 struct DualProfileProvider: AppIntentTimelineProvider {
@@ -3527,11 +3554,12 @@ struct DualProfileProvider: AppIntentTimelineProvider {
         func side(for profile: PlayerAccount?) -> DualProfileSide {
             guard let profile else { return DualProfileSide() }
             return DualProfileSide(
-                nickname: widgetNicknameLabel(for: profile),
+                nickname: widgetNicknameOnly(for: profile),
                 upgrades: profile.activeUpgrades,
                 activeBoosts: profile.activeBoosts,
                 goldPassBoost: max(profile.goldPassBoost, 0),
-                lastUpdated: profile.lastImportDate
+                lastUpdated: profile.lastImportDate,
+                tapToRefresh: profile.widgetTapRefresh
             )
         }
         return DualProfileEntry(
@@ -3559,6 +3587,7 @@ private struct DualUpdatedText: View {
                 Text(timerInterval: start...start.addingTimeInterval(86400), pauseTime: nil, countsDown: false, showsHours: false)
                     .monospacedDigit()
                     .lineLimit(1)
+                    .multilineTextAlignment(.trailing)
                     .frame(width: 38, alignment: .trailing)
             }
         } else {
@@ -3586,7 +3615,7 @@ private struct DualProfileColumn: View {
 
         VStack(spacing: 3) {
             Text(side.nickname)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -3600,7 +3629,8 @@ private struct DualProfileColumn: View {
                         goldPassBoost: side.goldPassBoost,
                         referenceDate: date,
                         rowHeight: rowHeight,
-                        bedtime: bedtime
+                        bedtime: bedtime,
+                        trailingTimer: true
                     )
                 }
             }
@@ -3635,7 +3665,7 @@ struct DualProfileEntryView: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
-        .widgetURL(URL(string: "clashdash://refresh"))
+        .widgetTapAction(refresh: entry.tapToRefresh)
     }
 }
 
