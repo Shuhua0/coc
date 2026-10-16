@@ -3494,6 +3494,20 @@ struct DualProfileProvider: AppIntentTimelineProvider {
             let boundary = last.addingTimeInterval(3600)
             if boundary > first.date && boundary < end { dates.append(boundary) }
         }
+        // Re-render exactly when an upgrade drops under 1 hour (static -> live countdown) and when it
+        // finishes ("Complete"), same as widgets 6-9.
+        for side in [first.left, first.right] {
+            for upgrade in side.upgrades {
+                let remaining = effectiveRemainingSeconds(for: upgrade, activeBoosts: side.activeBoosts, referenceDate: first.date)
+                if remaining > 3600 {
+                    dates.append(first.date.addingTimeInterval(remaining - 3600 + 1))
+                }
+                if remaining > 0 {
+                    dates.append(first.date.addingTimeInterval(remaining + 1))
+                }
+            }
+        }
+        dates = dates.filter { $0 >= first.date && $0 < end }
         dates.sort()
         let entries: [DualProfileEntry] = dates.map { d in
             DualProfileEntry(date: d, left: first.left, right: first.right, bedtime: first.bedtime)
