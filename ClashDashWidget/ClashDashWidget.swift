@@ -285,7 +285,11 @@ private func widgetTapRefreshEnabled(for configuration: WidgetProfileIntent) -> 
 
 /// "Nickname (#TAG)" using the in-game name when known.
 private func widgetNicknameLabel(for configuration: WidgetProfileIntent) -> String {
-    guard let profile = widgetProfile(for: configuration) else { return "" }
+    widgetNicknameLabel(for: widgetProfile(for: configuration))
+}
+
+private func widgetNicknameLabel(for profile: PlayerAccount?) -> String {
+    guard let profile else { return "" }
     let tag = profile.tag
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .replacingOccurrences(of: "#", with: "")
@@ -3393,6 +3397,245 @@ struct CombinedFullLavenderWidget: Widget {
         }
         .configurationDisplayName("Overview + Builder Base (Lavender)")
         .description("Overview + Builder Base widget on a lavender background with your nickname.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+// MARK: - Dual Profile Widget (2x1): profile 1 | profile 2
+
+/// Profile choice for the dual widget (no "automatic" entry: an unset slot falls back to the 1st / 2nd profile).
+struct DualProfileEntity: AppEntity {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Profile")
+    static var defaultQuery = DualProfileEntityQuery()
+
+    var id: String   // profile UUID string
+    var displayName: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(displayName)")
+    }
+}
+
+struct DualProfileEntityQuery: EntityQuery {
+    func entities(for identifiers: [DualProfileEntity.ID]) async throws -> [DualProfileEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [DualProfileEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [DualProfileEntity] {
+        guard let state = PersistentStore.loadState() else { return [] }
+        return state.profiles.map { profile in
+            let name: String
+            if !profile.displayName.isEmpty {
+                name = profile.displayName
+            } else if !profile.tag.isEmpty {
+                name = "#\(profile.tag)"
+            } else {
+                name = "Profile"
+            }
+            return DualProfileEntity(id: profile.id.uuidString, displayName: name)
+        }
+    }
+}
+
+struct DualProfileIntent: WidgetConfigurationIntent {
+    static let title: LocalizedStringResource = "Select Profiles"
+    static let description: IntentDescription = "Choose the profiles shown on the left and right. Leave empty to use the 1st and 2nd profile."
+
+    @Parameter(title: "Left Profile", description: "Leave empty to use the 1st profile")
+    var leftProfile: DualProfileEntity?
+
+    @Parameter(title: "Right Profile", description: "Leave empty to use the 2nd profile")
+    var rightProfile: DualProfileEntity?
+
+    func perform() async throws -> some IntentResult {
+        return .result()
+    }
+}
+
+/// Everything one half of the dual widget needs.
+struct DualProfileSide {
+    var nickname: String = ""
+    var upgrades: [BuildingUpgrade] = []
+    var activeBoosts: [ActiveBoost] = []
+    var goldPassBoost: Int = 0
+    var lastUpdated: Date? = nil
+}
+
+struct DualProfileEntry: TimelineEntry {
+    let date: Date
+    let left: DualProfileSide
+    let right: DualProfileSide
+    var bedtime: BedtimeSettings = BedtimeSettings.load()
+}
+
+struct DualProfileProvider: AppIntentTimelineProvider {
+    typealias Intent = DualProfileIntent
+    typealias Entry = DualProfileEntry
+
+    func placeholder(in context: Context) -> DualProfileEntry {
+        DualProfileEntry(date: Date(), left: DualProfileSide(), right: DualProfileSide())
+    }
+
+    func snapshot(for configuration: DualProfileIntent, in context: Context) async -> DualProfileEntry {
+        build(for: configuration, date: Date())
+    }
+
+    func timeline(for configuration: DualProfileIntent, in context: Context) async -> Timeline<DualProfileEntry> {
+        let first = build(for: configuration, date: Date())
+        // One entry per minute for the next hour so the timers and sorting stay current, plus an entry
+        // exactly when a profile's "last updated" crosses 1 hour (live m:ss -> static "Nh Nm").
+        let end = first.date.addingTimeInterval(3600)
+        var dates: [Date] = (0..<60).map { first.date.addingTimeInterval(Double($0) * 60) }
+        for last in [first.left.lastUpdated, first.right.lastUpdated].compactMap({ $0 }) {
+            let boundary = last.addingTimeInterval(3600)
+            if boundary > first.date && boundary < end { dates.append(boundary) }
+        }
+        dates.sort()
+        let entries: [DualProfileEntry] = dates.map { d in
+            DualProfileEntry(date: d, left: first.left, right: first.right, bedtime: first.bedtime)
+        }
+        return Timeline(entries: entries, policy: .after(end))
+    }
+
+    private func build(for configuration: DualProfileIntent, date: Date) -> DualProfileEntry {
+        let profiles = PersistentStore.loadState()?.profiles ?? []
+        func resolve(_ entity: DualProfileEntity?, fallbackIndex: Int) -> PlayerAccount? {
+            if let entity, let id = UUID(uuidString: entity.id),
+               let match = profiles.first(where: { $0.id == id }) {
+                return match
+            }
+            return profiles.indices.contains(fallbackIndex) ? profiles[fallbackIndex] : nil
+        }
+        func side(for profile: PlayerAccount?) -> DualProfileSide {
+            guard let profile else { return DualProfileSide() }
+            return DualProfileSide(
+                nickname: widgetNicknameLabel(for: profile),
+                upgrades: profile.activeUpgrades,
+                activeBoosts: profile.activeBoosts,
+                goldPassBoost: max(profile.goldPassBoost, 0),
+                lastUpdated: profile.lastImportDate
+            )
+        }
+        return DualProfileEntry(
+            date: date,
+            left: side(for: resolve(configuration.leftProfile, fallbackIndex: 0)),
+            right: side(for: resolve(configuration.rightProfile, fallbackIndex: 1))
+        )
+    }
+}
+
+/// "Last updated" label: under 1 hour a live "m:ss" count-up (ticks every second by itself),
+/// 1 hour or more a static "Nh Nm" (also for 1 day or more, no seconds).
+private struct DualUpdatedText: View {
+    let last: Date?
+    let now: Date
+
+    var body: some View {
+        if let last {
+            let elapsed = now.timeIntervalSince(last)
+            if elapsed >= 3600 {
+                let total = Int(elapsed)
+                Text("\(total / 3600)h \((total % 3600) / 60)m")
+            } else {
+                let start = min(last, now)
+                Text(timerInterval: start...start.addingTimeInterval(86400), pauseTime: nil, countsDown: false, showsHours: false)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .frame(width: 38, alignment: .trailing)
+            }
+        } else {
+            Text("--")
+        }
+    }
+}
+
+private struct DualProfileColumn: View {
+    let side: DualProfileSide
+    let date: Date
+    let bedtime: BedtimeSettings
+    private let rowHeight: CGFloat = 16
+
+    var body: some View {
+        // The 5 upgrades with the least time left (Helper's Hut is not an upgrade, so it never shows here).
+        let rows = Array(
+            side.upgrades
+                .sorted {
+                    effectiveRemainingSeconds(for: $0, activeBoosts: side.activeBoosts, referenceDate: date)
+                        < effectiveRemainingSeconds(for: $1, activeBoosts: side.activeBoosts, referenceDate: date)
+                }
+                .prefix(5)
+        )
+
+        VStack(spacing: 3) {
+            Text(side.nickname)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            VStack(spacing: 2) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, upgrade in
+                    CombinedUpgradeRow(
+                        upgrade: upgrade,
+                        activeBoosts: side.activeBoosts,
+                        goldPassBoost: side.goldPassBoost,
+                        referenceDate: date,
+                        rowHeight: rowHeight,
+                        bedtime: bedtime
+                    )
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            DualUpdatedText(last: side.lastUpdated, now: date)
+                .font(.system(size: 8))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+struct DualProfileEntryView: View {
+    var entry: DualProfileEntry
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            DualProfileColumn(side: entry.left, date: entry.date, bedtime: entry.bedtime)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            Rectangle()
+                .fill(Color.gray.opacity(0.25))
+                .frame(width: 1)
+                .frame(maxHeight: .infinity)
+
+            DualProfileColumn(side: entry.right, date: entry.date, bedtime: entry.bedtime)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .widgetURL(URL(string: "clashdash://refresh"))
+    }
+}
+
+/// Widget 10: two profiles side by side
+struct DualProfileWidget: Widget {
+    let kind: String = "DualProfileWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: DualProfileIntent.self, provider: DualProfileProvider()) { entry in
+            DualProfileEntryView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Dual Profiles")
+        .description("Two profiles side by side with their 5 soonest upgrades and last update time.")
         .supportedFamilies([.systemMedium])
     }
 }
