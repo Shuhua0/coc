@@ -3513,16 +3513,18 @@ struct DualProfileProvider: AppIntentTimelineProvider {
 
     func timeline(for configuration: DualProfileIntent, in context: Context) async -> Timeline<DualProfileEntry> {
         let first = build(for: configuration, date: Date())
-        // One entry per minute for the next hour so the timers and sorting stay current, plus an entry
-        // exactly when a profile's "last updated" crosses 1 hour (live m:ss -> static "Nh Nm").
+        // Keep the timeline SMALL: WidgetKit pre-renders every entry, and 60 per-minute entries (each drawing
+        // ~10 icons per side) made a reload (Shortcuts import / tap) show up late. One entry every 5 minutes
+        // keeps sorting and "Nh Nm" texts reasonably fresh; live m:ss timers tick by themselves.
         let end = first.date.addingTimeInterval(3600)
-        var dates: [Date] = (0..<60).map { first.date.addingTimeInterval(Double($0) * 60) }
+        var dates: [Date] = (0..<12).map { first.date.addingTimeInterval(Double($0) * 300) }
+        // Exactly when a profile's "last updated" crosses 1 hour (live m:ss -> static "Nh Nm").
         for last in [first.left.lastUpdated, first.right.lastUpdated].compactMap({ $0 }) {
             let boundary = last.addingTimeInterval(3600)
             if boundary > first.date && boundary < end { dates.append(boundary) }
         }
-        // Re-render exactly when an upgrade drops under 1 hour (static -> live countdown) and when it
-        // finishes ("Complete"), same as widgets 6-9.
+        // Exactly when an upgrade drops under 1 hour (static -> live countdown) and when it finishes
+        // ("Complete"), same as widgets 6-9.
         for side in [first.left, first.right] {
             for upgrade in side.upgrades {
                 let remaining = effectiveRemainingSeconds(for: upgrade, activeBoosts: side.activeBoosts, referenceDate: first.date)
@@ -3536,10 +3538,22 @@ struct DualProfileProvider: AppIntentTimelineProvider {
         }
         dates = dates.filter { $0 >= first.date && $0 < end }
         dates.sort()
-        let entries: [DualProfileEntry] = dates.map { d in
+        // Drop near-duplicates (within 30 s) and cap the total so the timeline never grows large again.
+        var unique: [Date] = []
+        for d in dates {
+            if let last = unique.last, d.timeIntervalSince(last) < 30 { continue }
+            unique.append(d)
+        }
+        let capped = Array(unique.prefix(16))
+        let entries: [DualProfileEntry] = capped.map { d in
             DualProfileEntry(date: d, left: first.left, right: first.right, bedtime: first.bedtime)
         }
-        return Timeline(entries: entries, policy: .after(end))
+        // If entries were cut off, reload at the last kept one so nothing stays stale.
+        var reloadAt = end
+        if capped.count < unique.count, let lastKept = capped.last, lastKept > first.date {
+            reloadAt = lastKept
+        }
+        return Timeline(entries: entries, policy: .after(reloadAt))
     }
 
     private func build(for configuration: DualProfileIntent, date: Date) -> DualProfileEntry {
