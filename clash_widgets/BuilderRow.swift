@@ -265,10 +265,30 @@ struct BuilderRow: View {
     @ViewBuilder
     private var timeRemainingView: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { context in
-            Text(formatRemaining(effectiveRemainingSeconds(for: upgrade, referenceDate: context.date)))
-                .font(.subheadline)
-                .foregroundColor(.orange)
+            let remaining = effectiveRemainingSeconds(for: upgrade, referenceDate: context.date)
+            HStack(spacing: 6) {
+                Text(formatRemaining(remaining))
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                Spacer(minLength: 4)
+                if remaining > 0 {
+                    Text(formatFinishDate(context.date.addingTimeInterval(remaining)))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+            }
         }
+    }
+
+    /// 완성 시각을 "d일 HH:mm" 형식으로 표시 (예: 1일 23:45)
+    private func formatFinishDate(_ date: Date) -> String {
+        let cal = Calendar.current
+        let day = cal.component(.day, from: date)
+        let hour = cal.component(.hour, from: date)
+        let minute = cal.component(.minute, from: date)
+        return String(format: "%d일 %02d:%02d", day, hour, minute)
     }
 
     private func progressFraction(for upgrade: BuildingUpgrade, referenceDate: Date) -> Double {
