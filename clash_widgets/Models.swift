@@ -1588,7 +1588,7 @@ enum KoreanNames {
         "Electro Fangs": "일렉트로 송곳니",
         "Revenge Deck": "복수 덱",
         "Portal Pendant": "포털 펜던드",
-        "Bomb": "폭탄병",
+        "Bomb": "폭탄",
         "Spring Trap": "점핑 트랩",
         "Giant Bomb": "대형 폭탄",
         "Air Bomb": "대공 폭탄",
