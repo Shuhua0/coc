@@ -627,6 +627,7 @@ struct CoCExport: Decodable {
     let units2: [ExportUnit]?
     let spells: [ExportSpell]?
     let equipment: [ExportUnit]?
+    let boosts: ExportBoosts?
 
     private enum CodingKeys: String, CodingKey {
         case tag
@@ -645,6 +646,7 @@ struct CoCExport: Decodable {
         case units2
         case spells
         case equipment
+        case boosts
     }
 
     init(from decoder: Decoder) throws {
@@ -675,8 +677,38 @@ struct CoCExport: Decodable {
         units2 = try container.decodeIfPresent([ExportUnit].self, forKey: .units2)
         spells = try container.decodeIfPresent([ExportSpell].self, forKey: .spells)
         equipment = try container.decodeIfPresent([ExportUnit].self, forKey: .equipment)
+        // Potion / consumable / Clock Tower timers. Never let a malformed block break the whole import.
+        boosts = try? container.decodeIfPresent(ExportBoosts.self, forKey: .boosts)
     }
 
+}
+
+/// The export's `boosts` block: remaining seconds per boost key
+/// (e.g. `lab_boost`, `builder_consumable`, `clocktower_boost`).
+struct ExportBoosts: Decodable {
+    let seconds: [String: Int]
+
+    private struct LossyInt: Decodable {
+        let value: Int?
+        init(from decoder: Decoder) throws {
+            let single = try decoder.singleValueContainer()
+            if let intValue = try? single.decode(Int.self) {
+                value = intValue
+            } else if let doubleValue = try? single.decode(Double.self),
+                      doubleValue.isFinite, abs(doubleValue) < 1e12 {
+                value = Int(doubleValue)
+            } else if let stringValue = try? single.decode(String.self), let intValue = Int(stringValue) {
+                value = intValue
+            } else {
+                value = nil
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode([String: LossyInt].self)
+        seconds = raw.compactMapValues { $0.value }
+    }
 }
 
 struct ExportGuardian: Codable {
@@ -684,6 +716,12 @@ struct ExportGuardian: Codable {
     let lvl: Int?
     let timer: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct Building: Codable {
@@ -695,6 +733,12 @@ struct Building: Codable {
     let supercharge: Int?
     let extra: Bool?
     let types: [BuildingType]?
+    var helperTimer: Int? = nil  // Remaining seconds of an active Builder's Apprentice / Lab Assistant boost
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, weapon, timer, cnt, supercharge, extra, types
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct BuildingType: Codable {
@@ -715,6 +759,12 @@ struct Trap: Codable {
     let timer: Int?
     let cnt: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, cnt, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct ExportHero: Codable {
@@ -722,6 +772,12 @@ struct ExportHero: Codable {
     let lvl: Int
     let timer: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct ExportPet: Codable {
@@ -736,6 +792,12 @@ struct ExportSiegeMachine: Codable {
     let lvl: Int
     let timer: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct ExportUnit: Codable {
@@ -743,6 +805,12 @@ struct ExportUnit: Codable {
     let lvl: Int
     let timer: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct ExportSpell: Codable {
@@ -750,6 +818,12 @@ struct ExportSpell: Codable {
     let lvl: Int
     let timer: Int?
     let extra: Bool?
+    var helperTimer: Int? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case data, lvl, timer, extra
+        case helperTimer = "helper_timer"
+    }
 }
 
 struct ExportHelper: Decodable {

@@ -1820,11 +1820,29 @@ class DataService: ObservableObject {
             let importTimestamp = Date()
             let normalizedTag = export.tag?.replacingOccurrences(of: "#", with: "").uppercased()
 
+            // Potions, consumables, Clock Tower and helper (Apprentice / Lab Assistant) boosts
+            // that are running in the game right now.
+            let helperLevelMap = self.helperLevels(from: export)  // `helperLevels` above is a local array, so call the method explicitly
+            let importedBoostList = importedBoosts(
+                from: export,
+                upgrades: upgrades,
+                apprenticeLevel: helperLevelMap[93000000] ?? currentProfile?.builderApprenticeLevel ?? 0,
+                labAssistantLevel: helperLevelMap[93000001] ?? currentProfile?.labAssistantLevel ?? 0,
+                referenceDate: importTimestamp
+            )
+            let importedUpgradeIDs = Set(upgrades.map { $0.id })
+
             suppressPersistence = true
             updateCurrentProfile { profile in
                 profile.rawJSON = input
                 profile.lastImportDate = importTimestamp
                 profile.activeUpgrades = upgrades
+                profile.activeBoosts = DataService.mergeImportedBoosts(
+                    existing: profile.activeBoosts,
+                    imported: importedBoostList,
+                    validUpgradeIDs: importedUpgradeIDs,
+                    now: importTimestamp
+                )
                 profile.helperCooldownOverrides = [:]
                 if inferredBuilderCount > profile.builderCount {
                     profile.builderCount = inferredBuilderCount
@@ -2474,4 +2492,126 @@ class DataService: ObservableObject {
         return [:]
     }
 
+}
+
+// MARK: - Boosts running in the game, read from the export
+
+extension DataService {
+    /// Export `boosts` keys and the boost each one becomes in the app. The value is the remaining time in seconds.
+    /// `lab_boost`, `builder_consumable` and `clocktower_boost` were confirmed against real exports.
+    /// `builder_boost`, `pet_boost` and `lab_consumable` follow the same naming and are simply ignored if absent.
+    private static let importedBoostKeys: [(key: String, type: BoostType)] = [
+        ("lab_boost", .researchPotion),
+        ("builder_boost", .builderPotion),
+        ("pet_boost", .petPotion),
+        ("builder_consumable", .builderBite),
+        ("lab_consumable", .studySoup),
+        ("clocktower_boost", .clockTower)
+    ]
+
+    /// Builds the boosts that are active in the export. Remaining times are counted from the import moment,
+    /// the same reference the upgrade timers use, so potions and upgrades always line up.
+    func importedBoosts(
+        from export: CoCExport,
+        upgrades: [BuildingUpgrade],
+        apprenticeLevel: Int,
+        labAssistantLevel: Int,
+        referenceDate: Date
+    ) -> [ActiveBoost] {
+        let minimumSeconds = 5
+        let maximumSeconds = 30 * 24 * 3600
+        var boosts: [ActiveBoost] = []
+
+        if let seconds = export.boosts?.seconds {
+            for entry in DataService.importedBoostKeys {
+                guard let remaining = seconds[entry.key],
+                      remaining >= minimumSeconds, remaining <= maximumSeconds else { continue }
+                boosts.append(
+                    ActiveBoost(
+                        type: entry.type.rawValue,
+                        startTime: referenceDate,
+                        endTime: referenceDate.addingTimeInterval(TimeInterval(remaining))
+                    )
+                )
+            }
+        }
+
+        // Builder's Apprentice / Lab Assistant: the export marks the exact upgrade they are working on
+        // with `helper_timer`, so the boost can be attached to that upgrade automatically.
+        var candidates: [(data: Int, timer: Int?, helperTimer: Int?)] = []
+        candidates += (export.buildings ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.traps ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.heroes ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.guardians ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.siegeMachines ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.units ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+        candidates += (export.spells ?? []).map { (data: $0.data, timer: $0.timer, helperTimer: $0.helperTimer) }
+
+        var usedUpgradeIDs = Set<UUID>()
+        for candidate in candidates {
+            guard let timer = candidate.timer, timer > 0,
+                  let helperRemaining = candidate.helperTimer,
+                  helperRemaining >= minimumSeconds, helperRemaining <= maximumSeconds else { continue }
+            guard let upgrade = upgrades.first(where: {
+                $0.dataId == candidate.data && $0.sourceExportTimer == timer && !usedUpgradeIDs.contains($0.id)
+            }) else { continue }
+
+            let helperType: BoostType
+            let level: Int
+            switch upgrade.category {
+            case .builderVillage:
+                helperType = .builderApprentice
+                level = apprenticeLevel
+            case .lab:
+                helperType = .labAssistant
+                level = labAssistantLevel
+            default:
+                continue
+            }
+
+            usedUpgradeIDs.insert(upgrade.id)
+            boosts.append(
+                ActiveBoost(
+                    type: helperType.rawValue,
+                    startTime: referenceDate,
+                    endTime: referenceDate.addingTimeInterval(TimeInterval(helperRemaining)),
+                    targetUpgradeId: upgrade.id,
+                    helperLevel: level
+                )
+            )
+        }
+
+        return boosts
+    }
+
+    /// Merges the boosts read from an export into the profile's existing ones.
+    /// A boost type that the export reports is replaced (never doubled, even if it was also started by hand);
+    /// types the export does not mention are left alone.
+    static func mergeImportedBoosts(
+        existing: [ActiveBoost],
+        imported: [ActiveBoost],
+        validUpgradeIDs: Set<UUID>,
+        now: Date
+    ) -> [ActiveBoost] {
+        var result = existing.filter { $0.endTime > now }
+
+        // Upgrade ids are regenerated on every import, so helper boosts aimed at an old id can never match again.
+        result.removeAll { boost in
+            guard let type = boost.boostType,
+                  type == .builderApprentice || type == .labAssistant,
+                  let target = boost.targetUpgradeId else { return false }
+            return !validUpgradeIDs.contains(target)
+        }
+
+        guard !imported.isEmpty else { return result }
+
+        let importedTypes = Set(imported.map { $0.type })
+        let importsClockTower = imported.contains { $0.boostType?.isClockTowerBoost == true }
+        result.removeAll { boost in
+            if importsClockTower, boost.boostType?.isClockTowerBoost == true { return true }
+            return importedTypes.contains(boost.type)
+        }
+        result.append(contentsOf: imported)
+        return result
+    }
 }

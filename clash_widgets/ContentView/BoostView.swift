@@ -23,6 +23,25 @@ private class BoostManager: ObservableObject {
                 self?.loadActiveBoosts()
             }
             .store(in: &cancellables)
+
+        // A JSON import rewrites the profile's boosts. Pick that up so this screen neither shows stale
+        // data nor overwrites the imported boosts the next time it saves.
+        dataService.$profiles
+            .sink { [weak self] profiles in
+                self?.syncBoostsFromProfiles(profiles)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func syncBoostsFromProfiles(_ profiles: [PlayerAccount]) {
+        guard let dataService = dataService,
+              let selectedID = dataService.selectedProfileID,
+              let profile = profiles.first(where: { $0.id == selectedID }) else { return }
+        let now = Date()
+        let stored = profile.activeBoosts.filter { $0.endTime > now }
+        let local = activeBoosts.filter { $0.endTime > now }
+        guard stored != local else { return }
+        activeBoosts = stored
     }
     
     deinit {
