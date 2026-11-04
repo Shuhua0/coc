@@ -140,21 +140,14 @@ struct BuilderRow: View {
                             .scaledToFit()
                             .frame(width: 16, height: 16)
                     }
+                    Spacer(minLength: 4)
+                    nameLineBadges
                 }
 
                 timeRemainingView
 
                 // Progress bar
-                ZStack(alignment: .topTrailing) {
-                    progressBarView
-                    if upgrade.usesGoblin {
-                        Image("profile/goblin_builder")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 30, height: 30)
-                            .offset(y: -36)
-                    }
-                }
+                progressBarView
             }
         }
         .padding(.vertical, 4)
@@ -279,6 +272,32 @@ struct BuilderRow: View {
                         .lineLimit(1)
                 }
             }
+        }
+    }
+
+    /// Right end of the name line: a moon when the upgrade finishes during bedtime (same icon and colour as the
+    /// Overview widgets) and the goblin when a goblin builder / goblin researcher is working on it.
+    @ViewBuilder
+    private var nameLineBadges: some View {
+        TimelineView(.periodic(from: Date(), by: 30)) { context in
+            let remaining = effectiveRemainingSeconds(for: upgrade, referenceDate: context.date)
+            let finishesDuringBedtime = remaining > 0
+                && BedtimeSettings.load().contains(context.date.addingTimeInterval(remaining))
+            HStack(spacing: 4) {
+                if finishesDuringBedtime {
+                    Image(systemName: "moon.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(red: 139.0 / 255.0, green: 124.0 / 255.0, blue: 246.0 / 255.0))
+                }
+                if upgrade.usesGoblin {
+                    Image("profile/goblin_builder")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                }
+            }
+            .frame(height: 22)
+            .fixedSize()
         }
     }
 
