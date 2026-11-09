@@ -22,6 +22,7 @@ struct ClashDashWidgetBundle: WidgetBundle {
         CombinedLavenderWidget()
         CombinedFullLavenderWidget()
         DualProfileWidget()
+        DualProfileHomeOnlyWidget()
         // WarStatusWidget()  // Hidden for now
         // WarStatusSmallWidget()  // Hidden for now
         // ClanWarWidget()  // Hidden for now

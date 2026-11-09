@@ -3485,6 +3485,10 @@ struct DualProfileSide {
     var activeBoosts: [ActiveBoost] = []
     var goldPassBoost: Int = 0
     var lastUpdated: Date? = nil
+    /// Home village builders (used by the "Builder Base X" variant to detect idle builders).
+    var builderCount: Int = 0
+    /// When the helpers' cooldown ends (longest of the 3 helpers), nil when there is no helper data.
+    var helperCooldownEnd: Date? = nil
     /// Profile setting "Tap widget to refresh" (an empty slot has no profile, so it counts as off).
     var tapToRefresh: Bool = false
 }
@@ -3526,6 +3530,16 @@ struct DualProfileProvider: AppIntentTimelineProvider {
         // Exactly when an upgrade drops under 1 hour (static -> live countdown) and when it finishes
         // ("Complete"), same as widgets 6-9.
         for side in [first.left, first.right] {
+            // Helper cooldown: static "Nh Nm" -> live countdown under 1 hour -> "Ready".
+            if let helperEnd = side.helperCooldownEnd {
+                let helperRemaining = helperEnd.timeIntervalSince(first.date)
+                if helperRemaining > 3600 {
+                    dates.append(first.date.addingTimeInterval(helperRemaining - 3600 + 1))
+                }
+                if helperRemaining > 0 {
+                    dates.append(first.date.addingTimeInterval(helperRemaining + 1))
+                }
+            }
             for upgrade in side.upgrades {
                 let remaining = effectiveRemainingSeconds(for: upgrade, activeBoosts: side.activeBoosts, referenceDate: first.date)
                 if remaining > 3600 {
@@ -3573,6 +3587,8 @@ struct DualProfileProvider: AppIntentTimelineProvider {
                 activeBoosts: profile.activeBoosts,
                 goldPassBoost: max(profile.goldPassBoost, 0),
                 lastUpdated: profile.lastImportDate,
+                builderCount: max(profile.builderCount, 0),
+                helperCooldownEnd: dualHelperCooldownEnd(rawJSON: profile.rawJSON),
                 tapToRefresh: profile.widgetTapRefresh
             )
         }
@@ -3581,6 +3597,76 @@ struct DualProfileProvider: AppIntentTimelineProvider {
             left: side(for: resolve(configuration.leftProfile, fallbackIndex: 0)),
             right: side(for: resolve(configuration.rightProfile, fallbackIndex: 1))
         )
+    }
+}
+
+/// Longest remaining helper cooldown (apprentice builder / lab assistant / alchemist) as an absolute date.
+/// Same source and "longest of the helpers" rule as the helper's hut bar of widgets 5-9.
+private func dualHelperCooldownEnd(rawJSON: String) -> Date? {
+    guard !rawJSON.isEmpty,
+          let data = rawJSON.data(using: .utf8),
+          let export = try? JSONDecoder().decode(CoCExport.self, from: data),
+          let helpers = export.helpers else { return nil }
+    let exportDate: Date = export.timestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) } ?? Date()
+    let ends = helpers
+        .filter { (93000000...93000002).contains($0.data) }
+        .map { exportDate.addingTimeInterval(TimeInterval(max($0.helperCooldown ?? 0, 0))) }
+    return ends.max()
+}
+
+/// "Builder Base X" variant: true when at least one of Builders / Pets / Laboratory is resting
+/// (nothing running, or the running upgrade has already finished at `date`).
+private func dualHasIdleSlot(side: DualProfileSide, date: Date) -> Bool {
+    guard !side.nickname.isEmpty else { return false }
+    let running = side.upgrades.filter {
+        effectiveRemainingSeconds(for: $0, activeBoosts: side.activeBoosts, referenceDate: date) > 0
+    }
+    let builderBusy = running.filter { $0.category == .builderVillage }
+    let goblinActive = builderBusy.contains { $0.usesGoblin }
+    let builderSlots = side.builderCount + (goblinActive ? 1 : 0)
+    if builderBusy.count < builderSlots { return true }
+    if !running.contains(where: { $0.category == .pets }) { return true }
+    if !running.contains(where: { $0.category == .lab }) { return true }
+    return false
+}
+
+/// Bottom-left label of the "Builder Base X" variant: helper cooldown left
+/// (static "Nh Nm", live countdown under 1 hour, green "Ready" when finished).
+private struct DualHelperText: View {
+    let end: Date?
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 2) {
+            trimmedWidgetImage(named: "buildings_home/helper_hut")
+                .interpolation(.none)
+                .resizable()
+                .clashWidgetTintAwareRendering()
+                .scaledToFit()
+                .frame(width: 10, height: 10)
+            if let end {
+                let remaining = end.timeIntervalSince(now)
+                if remaining <= 0 {
+                    Text("Ready")
+                        .foregroundColor(.green)
+                } else {
+                    let total = Int(remaining)
+                    LiveCountdownText(
+                        endDate: end,
+                        fallback: "\(total / 3600)h \((total % 3600) / 60)m",
+                        referenceDate: now,
+                        alignment: .leading,
+                        width: 38
+                    )
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+            } else {
+                Text("--")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .lineLimit(1)
     }
 }
 
@@ -3614,12 +3700,19 @@ private struct DualProfileColumn: View {
     let side: DualProfileSide
     let date: Date
     let bedtime: BedtimeSettings
+    /// "Builder Base X" variant: only Builders / Pets / Laboratory, green nickname when one rests,
+    /// helper cooldown at the bottom left.
+    var homeOnly: Bool = false
     private let rowHeight: CGFloat = 16
 
     var body: some View {
         // The 5 upgrades with the least time left (Helper's Hut is not an upgrade, so it never shows here).
+        let shown = homeOnly
+            ? side.upgrades.filter { $0.category == .builderVillage || $0.category == .lab || $0.category == .pets }
+            : side.upgrades
+        let nicknameColor: Color = (homeOnly && dualHasIdleSlot(side: side, date: date)) ? .green : .primary
         let rows = Array(
-            side.upgrades
+            shown
                 .sorted {
                     effectiveRemainingSeconds(for: $0, activeBoosts: side.activeBoosts, referenceDate: date)
                         < effectiveRemainingSeconds(for: $1, activeBoosts: side.activeBoosts, referenceDate: date)
@@ -3630,7 +3723,7 @@ private struct DualProfileColumn: View {
         VStack(spacing: 3) {
             Text(side.nickname)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.primary)
+                .foregroundColor(nicknameColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -3651,21 +3744,29 @@ private struct DualProfileColumn: View {
 
             Spacer(minLength: 0)
 
-            DualUpdatedText(last: side.lastUpdated, now: date)
-                .font(.system(size: 8))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            HStack(spacing: 0) {
+                if homeOnly {
+                    DualHelperText(end: side.helperCooldownEnd, now: date)
+                        .font(.system(size: 8))
+                }
+                Spacer(minLength: 2)
+                DualUpdatedText(last: side.lastUpdated, now: date)
+                    .font(.system(size: 8))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 }
 
 struct DualProfileEntryView: View {
     var entry: DualProfileEntry
+    var homeOnly: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            DualProfileColumn(side: entry.left, date: entry.date, bedtime: entry.bedtime)
+            DualProfileColumn(side: entry.left, date: entry.date, bedtime: entry.bedtime, homeOnly: homeOnly)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             Rectangle()
@@ -3673,7 +3774,7 @@ struct DualProfileEntryView: View {
                 .frame(width: 1)
                 .frame(maxHeight: .infinity)
 
-            DualProfileColumn(side: entry.right, date: entry.date, bedtime: entry.bedtime)
+            DualProfileColumn(side: entry.right, date: entry.date, bedtime: entry.bedtime, homeOnly: homeOnly)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(.horizontal, 12)
@@ -3694,6 +3795,22 @@ struct DualProfileWidget: Widget {
         }
         .configurationDisplayName("Dual Profiles")
         .description("Two profiles side by side with their 5 soonest upgrades and last update time.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+/// Widget 11: same as widget 10 without Builder Base / Star Laboratory.
+/// Nickname turns green when Builders, Pets or Laboratory is resting; bottom left shows the helper cooldown.
+struct DualProfileHomeOnlyWidget: Widget {
+    let kind: String = "DualProfileHomeOnlyWidget"
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: DualProfileIntent.self, provider: DualProfileProvider()) { entry in
+            DualProfileEntryView(entry: entry, homeOnly: true)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Dual Profiles (Builder Base X)")
+        .description("Two profiles side by side with Builders, Pets and Laboratory. Nickname turns green when one is resting; helper cooldown at the bottom left.")
         .supportedFamilies([.systemMedium])
     }
 }
