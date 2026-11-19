@@ -11,22 +11,32 @@ import CryptoKit
 final class RemoteContentService: ObservableObject {
     static let shared = RemoteContentService()
     @Published private(set) var environment: RemoteContentEnvironment = .live
-    @Published private(set) var remoteEvents: [RemoteEvent] = []
-    @Published private(set) var testEvent: RemoteEvent?
+    @Published private(set) var remoteEvents: [RemoteEvent] = [] {
+        didSet { scheduleClockUpdate() }
+    }
+    @Published private(set) var testEvent: RemoteEvent? {
+        didSet { scheduleClockUpdate() }
+    }
     @Published private(set) var localTestEnabled = true
     @Published private(set) var testProfileID: UUID?
     private(set) var profileBeforeTest: UUID?
     var events: [RemoteEvent] { remoteEvents.map { environment.scopedEvent($0) } + (environment == .live && localTestEnabled ? (testEvent.map { [$0] } ?? []) : []) }
-    @Published private(set) var news: [RemoteNews] = []
+    @Published private(set) var news: [RemoteNews] = [] {
+        didSet { scheduleClockUpdate() }
+    }
     @Published private(set) var lastError: String?
     @Published private(set) var isRefreshing = false
     @Published private(set) var launchRefreshResolved = false
     @Published private(set) var eventsUpdatedInLastRefresh = false
-    @Published private(set) var now = Date()
+    @Published private(set) var now = Date() {
+        didSet { scheduleClockUpdate() }
+    }
     private let defaults: UserDefaults
     private let session: URLSession
     private let configuredBaseURL: URL?
-    private var timer: AnyCancellable?
+    private var clockUpdate: Task<Void, Never>?
+    // In-memory only: a fresh process gets one immediate fetch per environment.
+    private var launchAttemptedEnvironments: Set<RemoteContentEnvironment> = []
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     // Set this Info.plist key before shipping. No credentials belong in a public feed.
@@ -70,7 +80,24 @@ final class RemoteContentService: ObservableObject {
             testProfileID = profileID
             profileBeforeTest = defaults.string(forKey: "remoteContent.profileBeforeTest").flatMap(UUID.init(uuidString:))
         }
-        timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] in self?.now = $0 }
+        scheduleClockUpdate()
+    }
+
+    // Publish only when content actually changes availability. Countdown labels
+    // own their TimelineViews; a clock tick must not redraw every tab or decode
+    // every profile's export again.
+    private func scheduleClockUpdate() {
+        clockUpdate?.cancel()
+        clockUpdate = nil
+        guard let next = RemoteContentClockSchedule.nextUpdate(events: events, news: news, after: now) else { return }
+        let delay = max(0.01, next.timeIntervalSinceNow)
+        clockUpdate = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.now = Date()
+        }
     }
 
     private func loadEnvironmentCache() {
@@ -117,27 +144,27 @@ final class RemoteContentService: ObservableObject {
         let currentBuild = "\(version) (\(build))"
         let successfulBuild = defaults.string(forKey: environment.cacheKey("successfulBuild"))
         let needsBuildRefresh = successfulBuild != currentBuild
+        let coldLaunch = !launchAttemptedEnvironments.contains(environment)
         guard RemoteContentRefreshPolicy.shouldRefresh(now: now, force: force, hasCache: hasCache,
             lastSuccess: lastSuccess, lastAttempt: lastAttempt, currentBuild: currentBuild,
             successfulBuild: successfulBuild,
-            attemptedBuild: defaults.string(forKey: environment.cacheKey("attemptedBuild"))) else { return }
+            attemptedBuild: defaults.string(forKey: environment.cacheKey("attemptedBuild")),
+            coldLaunch: coldLaunch) else { return }
+        launchAttemptedEnvironments.insert(environment)
         isRefreshing = true
         eventsUpdatedInLastRefresh = false
         defaults.set(now, forKey: environment.cacheKey("lastAttempt"))
         defaults.set(currentBuild, forKey: environment.cacheKey("attemptedBuild"))
         defer { isRefreshing = false }
         do {
-            let bypassServerCache = force || needsBuildRefresh
+            let bypassServerCache = true
             async let eventData = fetch(baseURL.appendingPathComponent("latest_event.json"), bypassServerCache: bypassServerCache)
             async let latestData = fetch(baseURL.appendingPathComponent("latest_news.json"), bypassServerCache: bypassServerCache)
             let eventBytes = try await eventData
             let eventFeed = try decoder.decode(RemoteEventFeed.self, from: eventBytes)
             try eventFeed.validate()
-            // A valid event feed is authoritative, including an empty events array.
-            // Commit it before news so unrelated news failures cannot retain removed events.
-            defaults.set(eventBytes, forKey: environment.cacheKey("events"))
-            remoteEvents = eventFeed.events
-            eventsUpdatedInLastRefresh = true
+            // Replace before awaiting news: removed events end immediately even if news fails.
+            replaceRemoteEvents(with: eventFeed, bytes: eventBytes)
             let latest = try decoder.decode(LatestRemoteNews.self, from: await latestData)
             guard latest.schemaVersion == 1 else { throw RemoteContentError.invalidPayload }
             var feed = RemoteNewsFeed(schemaVersion: 1, entries: news)
@@ -158,6 +185,21 @@ final class RemoteContentService: ObservableObject {
                 ? "Events updated (\(remoteEvents.count) downloaded). News could not be refreshed; saved news is still available."
                 : "Unable to refresh events. Saved events and news are still available."
         }
+    }
+
+    private func replaceRemoteEvents(with feed: RemoteEventFeed, bytes: Data) {
+        // This is a complete snapshot, never a merge with locally running events.
+        // Persist the replacement so a removed event cannot return after restart.
+        defaults.set(bytes, forKey: environment.cacheKey("events"))
+        now = Date()
+        remoteEvents = feed.events
+        eventsUpdatedInLastRefresh = true
+    }
+
+    // Screens must resolve by ID on each render instead of continuing a captured
+    // event's old countdown after removal, disabling, expiry or a feed switch.
+    func currentEvent(id: String) -> RemoteEvent? {
+        events.first { $0.id == id && $0.isVisible(at: now) }
     }
 
     private func fetch(_ url: URL, bypassServerCache: Bool = false) async throws -> Data {
@@ -214,10 +256,20 @@ final class RemoteContentService: ObservableObject {
         defaults.removeObject(forKey: "remoteContent.profileBeforeTest")
     }
 
+    func upgradeFactor(category: String, dataID: Int, townHall: Int, superchargeLevel: Int? = nil,
+                       cost: Bool = false, profileID: UUID? = nil) -> Double {
+        events.filter { $0.isActive(at: now) && eventApplies($0, to: profileID) }.compactMap {
+            remoteEventModifierFactor(modifiers: $0.modifiers, category: category, dataID: dataID,
+                townHall: townHall, superchargeLevel: superchargeLevel,
+                value: cost ? \.costMultiplier : \.timeMultiplier)
+        }.min() ?? 1
+    }
+
     func wallFactor(townHall: Int, profileID: UUID? = nil) -> Double {
-        events.filter { $0.isActive(at: now) && eventApplies($0, to: profileID) }.flatMap(\.modifiers)
-            .filter { $0.matches(category: "walls", dataID: nil, townHall: townHall) }
-            .compactMap(\.wallCostMultiplier).min() ?? 1
+        events.filter { $0.isActive(at: now) && eventApplies($0, to: profileID) }.compactMap {
+            remoteEventModifierFactor(modifiers: $0.modifiers, category: "walls", dataID: nil,
+                townHall: townHall, value: \.wallCostMultiplier)
+        }.min() ?? 1
     }
 
 }

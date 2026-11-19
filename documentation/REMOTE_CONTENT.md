@@ -9,14 +9,14 @@ The app can now read native news articles and event configuration from a public 
 ## Your initial setup
 
 1. Decide where to host the three feed files. The default uses this repository's `main` branch. **The repository and branch must be publicly readable without signing in.** If this repository is private, create a separate public content repository, copy `remote/` there, and change `RemoteContentBaseURL` in `clash-widgets-Info.plist` before building. No GitHub token is needed or should be put in the app.
-2. Commit and push the implementation and the live files in `remote/` (the live event list is currently empty). If using another host, publish the three files there. `remote/examples/` is documentation only; the app never reads it.
+2. Commit and push the implementation and the live files in `remote/` (including the live event definitions). If using another host, publish the three files there. `remote/examples/` is documentation only; the app never reads it.
 3. Confirm the base URL plus `/latest_event.json`, `/latest_news.json`, and `/news_feed.json` returns raw JSON without authentication. `main` is the configured branch; change the URL if you use a different branch.
 4. Run the app on a device or simulator, complete setup, then open **Home → Help (?) → News**. Pull to refresh forces a check, which is useful while testing.
 5. Publish a temporary news article with a unique ID, a past UTC `published` date, and `showAsPopup: true`. Restart the app on an already seen version to test the popup. Displaying it marks it seen. With a new app version, What’s New takes priority and news stays unread until the next launch. Verify the image, article, and countdowns on iPhone and iPad.
 6. Test a short event against a test village/export before publishing real rules. Check timers, wall costs, widgets after opening the app, and notifications.
 7. Ship **one new app build** containing this infrastructure. Older installed builds cannot use it. Subsequent supported content changes require only publishing the JSON/images.
 
-The live event feed currently contains no events. Existing live news articles are retained independently. Development test content remains in `remote_dev/`, and the example under `remote/examples/` stays disabled. Commit and push feed edits to publish them; local edits alone do not update installed apps.
+The live event feed contains Hammer Jam for November 1–16, 2026 at 08:00 UTC and an information-only Goblin Workers entry for the full UTC calendar month of November. Existing live news articles are retained independently. Development test content remains in `remote_dev/`, and the example under `remote/examples/` stays disabled. Commit and push feed edits to publish them; local edits alone do not update installed apps.
 
 ## Publishing news
 
@@ -37,7 +37,7 @@ News lives in the third tab of the Welcome/What’s New sheet. Home begins with 
 
 Copy `remote/examples/hammer_jam.json`, confirm the actual rules, supply a permanent unique ID, replace dates/copy, and set `enabled: true`. Keep event IDs stable across routine text edits; never reuse an ID for next year's event. Set `enabled: false` or remove an event to hide it and stop future modifiers. Already adjusted tracked timers stay adjusted; changes do not undo historical timer effects.
 
-Each event requires `id`, `enabled`, `start`, `end`, `presentation`, and `modifiers`. An optional top-level `icon` uses the image schema below and appears on the left of its Home event card (48 × 48 points). It is separate from `presentation.image`, which is the detail-page artwork. Older feeds can omit `icon`. Dates must be UTC in `YYYY-MM-DDTHH:MM:SSZ` format. Before `start` it is upcoming; from `start` up to but excluding `end` it is active; at/after `end` it disappears. This uses the device clock and cached timestamps, without a network request at the boundary. Home and detail countdowns use `xx Days hh:mm:ss` (for example `02 Days 03:04:05`).
+Each event requires `id`, `enabled`, `start`, `end`, `presentation`, and `modifiers`. An optional top-level `icon` uses the image schema below and appears on the left of its Home event card (48 × 48 points). It is separate from `presentation.image`, which is the detail-page artwork. Older feeds can omit `icon`. Advanced rules require event `schemaVersion: 2`; see the [advanced configuration examples](REMOTE_CONTENT_QUICK_GUIDE.md#advanced-event-rules-requires-the-updated-app). Legacy version 1 remains supported. Dates must be UTC in `YYYY-MM-DDTHH:MM:SSZ` format. Before `start` it is upcoming; from `start` up to but excluding `end` it is active; at/after `end` it disappears. This uses the device clock and cached timestamps, without a network request at the boundary. Home and detail countdowns use `xx Days hh:mm:ss` (for example `02 Days 03:04:05`).
 
 Supported modifier fields:
 
@@ -50,10 +50,14 @@ Supported modifier fields:
 | `dataIDs` | Optional allow-list of exact exported upgrade IDs |
 | `excludedDataIDs` | Optional deny-list of exported upgrade IDs |
 | `excludeSupercharges` | Optional boolean; set `true` to exclude Supercharge upgrades from that rule |
+| `onlySupercharges` | Version 2: only match Supercharge upgrades |
+| `superchargeLevels` | Version 2: positive target Supercharge levels, e.g. `[1]` for 0→1 |
+| `costMultiplier` | Version 2: resource cost factor, displayed in Supercharge upgrade details |
+| `priority` | Version 2: nonnegative rule priority (default 0); highest matching priority per metric wins within an event |
 
 Use separate rules for different Town Hall reductions. **Resource-conditioned Summer Jam rules currently require explicit `dataIDs` for the affected upgrades. There is no automatic resource-name selector.** Use IDs from the bundled mappings and verify against exports. Walls have no single exported upgrade ID, so wall rules should use category and Town Hall bounds only. Seasonal crafted defenses are excluded from timer shortening. Apply any other official exclusions explicitly.
 
-When multiple rules/events match, the smallest factor wins; event reductions do not multiply with each other. Gold Pass and the chosen event factor multiply. Only displayed wall costs support event cost reductions today; other upgrade costs and ore costs are unaffected.
+Within an event, the highest matching priority wins separately for each metric; tied rules use the smallest factor. Across events, the smallest factor wins; event reductions do not multiply with each other. Gold Pass and the chosen event factor multiply. Displayed wall costs use `wallCostMultiplier`. Supercharge details in Progress support `costMultiplier`; regular upgrade cost screens, max totals, and ore costs are unaffected.
 
 ## Timer behavior and limits
 
@@ -98,7 +102,7 @@ Any image already in the installed app’s asset catalog can be referenced by it
 
 ## Refreshing and validation
 
-The app renders saved content immediately. On launch/foreground it fetches the events and latest-news pointer if the last successful refresh was at least 24 hours ago. The first launch on a new app version or build bypasses the daily cooldown and downloads all three files. A build is marked refreshed only after success; a failed attempt retries after the 15-minute backoff. On ordinary same-build checks it downloads the full news feed only if the latest ID is missing locally or there is no initial cache. Failed event fetches retain the last valid event cache and allow a retry after 15 minutes. A valid event feed replaces the event cache immediately, including an empty list, even if a separate news request fails. Forced and new-build requests bypass server/CDN caching. Pull to refresh bypasses both intervals. In Settings → Debug, **Grab Remote Files Now** also bypasses both intervals and always downloads all three JSON files, including the full news feed even if its latest ID is already cached. It reports success/failure, shows cache counts and the source URL, and immediately reconciles the refreshed events. New content is not a push notification and may take a day to reach an active installation, or longer if the app is not opened/offline. Publish event dates at least a couple of days early.
+The app renders saved content immediately. Every fresh app process immediately fetches events and the latest-news pointer. Returning to the foreground also fetches on the first open of each local calendar day, or when six hours have elapsed since the last successful refresh. The first daily attempt bypasses a recent failure from the previous day; further failed attempts use the 15-minute retry backoff. The first launch on a new app version or build bypasses the six-hour cooldown and downloads all three files. A build is marked refreshed only after success; a failed attempt retries after the 15-minute backoff. On ordinary same-build checks it downloads the full news feed only if the latest ID is missing locally or there is no initial cache. Failed event fetches retain the last valid event cache and allow a retry after 15 minutes. Every valid event response replaces the entire event list and its persisted cache immediately, including when only one event is removed or the list is empty, even if a separate news request fails. Removed events disappear from Home, lose their active cost modifiers, and any already-open detail page shows “Event ended” instead of continuing its old countdown. Updated or disabled events are resolved from the current feed rather than a captured screen snapshot. Previously adjusted building timers retain their reductions, just as at normal expiry. All admitted refreshes bypass server/CDN caching. Pull to refresh bypasses both intervals. In Settings → Debug, **Grab Remote Files Now** also bypasses both intervals and always downloads all three JSON files, including the full news feed even if its latest ID is already cached. It reports success/failure, shows cache counts and the source URL, and immediately reconciles the refreshed events. New content is not a push notification and is checked on app launch and eligible foreground returns; offline or unopened installations retain their cache. Publish event dates at least a couple of days early.
 
 Run before publishing:
 
@@ -119,7 +123,7 @@ The normal Xcode app build covers the native screens and app/widget model compat
 
 ## Current live state
 
-`remote/latest_event.json` contains `{"schemaVersion": 1, "events": []}`. No live event card or new event modifier applies after that feed is fetched. Already applied timer reductions are retained. The live news archive and development fixtures are unchanged; see `remote_dev/` for test content.
+`remote/latest_event.json` enables Hammer Jam from `2026-11-01T08:00:00Z` until `2026-11-16T08:00:00Z`, with a 0.5 time multiplier for eligible Home Village builder, Laboratory, and Pet House upgrades and a 0.5 wall cost multiplier. Temporary Supercharges and seasonal Crafted Defenses are excluded. The event details describe the 50% upgrade cost reduction and doubled resource production and collector storage; the engine only calculates timer and wall cost reductions. A separate information-only Goblin Workers entry runs for the full UTC calendar month of November (November 1 at 00:00 UTC until December 1 at 00:00 UTC). The live news archive and development fixtures are unchanged; see `remote_dev/` for test content. Commit and push these feed changes to publish them.
 
 ## Five-minute lifecycle test (no publishing required)
 
@@ -141,7 +145,7 @@ This local test exercises the app's actual event reconciliation, persistence, Ho
 
 ### Remote publishing check
 
-For an actual short remote event, use a fresh event ID and UTC `start` / `end` dates five minutes apart, with enough lead time to publish and fetch before `start`. Keep the same modifiers and icon as the event you want to test. Run the validator, publish the feed, then use **Grab Remote Files Now** and confirm success while the event is still upcoming. A normal restart may use the daily cache, so do not rely on restarting to fetch a five-minute event.
+For an actual short remote event, use a fresh event ID and UTC `start` / `end` dates five minutes apart, with enough lead time to publish and fetch before `start`. Keep the same modifiers and icon as the event you want to test. Run the validator, publish the feed, then use **Grab Remote Files Now** and confirm success while the event is still upcoming. A fresh app launch fetches immediately; returning to an already running app follows the six-hour/local-day policy.
 
 Publishing to the configured production feed affects other app installations too. Use the separate `remote_dev` feed through **Grab Remote Dev Files** for remote testing (see below). Test with disposable exported village data: reductions already applied to an upgrade are retained after event removal or expiry, and changing the event ID may make it a new event.
 

@@ -1682,7 +1682,27 @@ enum KoreanNames {
         "Builder's Apprentice": "견습 장인",
         "Lab Assistant": "연구소 조수",
         "Alchemist": "연금술사",
-        "Helper's Hut": "도우미 오두막"
+        "Helper's Hut": "도우미 오두막",
+        // TH19 (1.4)
+        "Spiky Tower": "스파이키 타워",
+        "Firecracker Tower": "로켓병 타워",
+        "Squad Barracks": "스쿼드 훈련소",
+        "Guardian Shrine": "가디언 신전",
+        "Heroic Spell": "용감 마법",
+        "Barch Squad": "바처 스쿼드",
+        "Giant Wizard Squad": "자이언트 마법사 스쿼드",
+        "Wall Breaker Squad": "해골 돌격병 스쿼드",
+        "Minion Squad": "미니언 스쿼드",
+        "Balloon Squad": "해골 비행선 스쿼드",
+        "Golem Witch Squad": "골렘 마녀 스쿼드",
+        "Hog Rider Squad": "호그 라이더 스쿼드",
+        "Miner Squad": "광부 스쿼드",
+        "Healer Squad": "치유사 스쿼드",
+        "P.E.K.K.A Titan Squad": "P.E.K.K.A 타이탄 스쿼드",
+        "Dragons Squad": "드래곤 스쿼드",
+        "Baby Dragon Squad": "베이비 드래곤 스쿼드",
+        "Battle Machine Altar": "배틀 머신 제단",
+        "Battle Copter Altar": "배틀콥터 제단",
     ]
 
     nonisolated static func display(_ name: String) -> String {

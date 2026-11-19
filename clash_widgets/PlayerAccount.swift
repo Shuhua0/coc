@@ -23,6 +23,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
     var activeBoosts: [ActiveBoost]
     var instantBoostUndoActions: [InstantBoostUndoAction]
     var helperCooldownOverrides: [Int: Date]
+    var isWidgetPriority: Bool
     var widgetTapRefresh: Bool
 
     init(
@@ -47,6 +48,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
         activeBoosts: [ActiveBoost] = [],
         instantBoostUndoActions: [InstantBoostUndoAction] = [],
         helperCooldownOverrides: [Int: Date] = [:],
+        isWidgetPriority: Bool = false,
         widgetTapRefresh: Bool = true
     ) {
         self.id = id
@@ -70,6 +72,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
         self.activeBoosts = activeBoosts
         self.instantBoostUndoActions = instantBoostUndoActions
         self.helperCooldownOverrides = helperCooldownOverrides
+        self.isWidgetPriority = isWidgetPriority
         self.widgetTapRefresh = widgetTapRefresh
     }
 
@@ -95,6 +98,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
         case activeBoosts
         case instantBoostUndoActions
         case helperCooldownOverrides
+        case isWidgetPriority
         case widgetTapRefresh
     }
 
@@ -129,6 +133,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
         }
         self.instantBoostUndoActions = try container.decodeIfPresent([InstantBoostUndoAction].self, forKey: .instantBoostUndoActions) ?? []
         self.helperCooldownOverrides = try container.decodeIfPresent([Int: Date].self, forKey: .helperCooldownOverrides) ?? [:]
+        self.isWidgetPriority = try container.decodeIfPresent(Bool.self, forKey: .isWidgetPriority) ?? false
         self.widgetTapRefresh = try container.decodeIfPresent(Bool.self, forKey: .widgetTapRefresh) ?? true
     }
 
@@ -155,6 +160,7 @@ struct PlayerAccount: Identifiable, Codable, Equatable {
         try container.encode(activeBoosts, forKey: .activeBoosts)
         try container.encode(instantBoostUndoActions, forKey: .instantBoostUndoActions)
         try container.encode(helperCooldownOverrides, forKey: .helperCooldownOverrides)
+        try container.encode(isWidgetPriority, forKey: .isWidgetPriority)
         try container.encode(widgetTapRefresh, forKey: .widgetTapRefresh)
     }
 }

@@ -14,6 +14,9 @@ struct RemoteContentImageView: View {
             } else if let fallbackSystemImage {
                 Image(systemName: fallbackSystemImage)
                     .resizable().scaledToFit().foregroundStyle(.secondary)
+            } else if reference.source == "remote" {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
             }
         }
         .frame(maxHeight: 420)
@@ -63,16 +66,34 @@ struct RemoteEventDetailView: View {
     let event: RemoteEvent
     @ObservedObject private var content = RemoteContentService.shared
     var body: some View {
+        let currentEvent = content.currentEvent(id: event.id)
         VStack(spacing: 0) {
-            HStack {
-                if content.now >= event.end {
-                    Text("Event ended")
+            Group {
+                if let currentEvent {
+                    RemoteEventCountdownView(event: currentEvent)
                 } else {
-                    Text(content.now < event.start ? "Starts in" : "Ends in")
-                    Text(remoteEventCountdown(until: content.now < event.start ? event.start : event.end, at: content.now)).monospacedDigit()
+                    Text("Event ended")
                 }
             }.font(.subheadline).padding()
-            RemoteArticleView(presentation: event.presentation)
+            RemoteArticleView(presentation: currentEvent?.presentation ?? event.presentation)
+        }
+    }
+}
+
+struct RemoteEventCountdownView: View {
+    let event: RemoteEvent
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack {
+                if context.date >= event.end {
+                    Text("Event ended")
+                } else {
+                    Text(context.date < event.start ? "Starts in" : "Ends in")
+                    Text(remoteEventCountdown(until: context.date < event.start ? event.start : event.end,
+                                              at: context.date)).monospacedDigit()
+                }
+            }
         }
     }
 }

@@ -17,6 +17,7 @@ struct ClashDashWidgetBundle: WidgetBundle {
         BuilderBaseWidget()
         HelperCooldownWidget()
         ClosestUpgradeWidget()
+        MultiAccountWidget()
         CombinedWidget()
         CombinedFullWidget()
         CombinedLavenderWidget()
