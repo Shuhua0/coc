@@ -1,4 +1,6 @@
 import SwiftUI
+import Combine
+import Foundation
 
 // MARK: - 남은 업그레이드 요약 (비용 / 시간)
 //
