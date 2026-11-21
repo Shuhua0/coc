@@ -26,3 +26,11 @@
 2. 게임 업데이트로 새로 생긴 항목의 영어 이름 -> 한글 이름 (모르면 "게임에서 확인해서 알려줄게"라고 해도 됨)
 3. 앱 업데이트 내역(패치 노트)
 4. 지난번과 달라진 동작이 있으면 그 증상 (예: 영어로 보이는 이름, 아이콘 안 뜸)
+
+## 5. 남은 업그레이드 요약 화면 (cocV27 추가)
+- 새 파일: `clash_widgets/ContentView/UpgradeSummaryView.swift` (project.pbxproj 에 등록돼 있음)
+- 버튼: `UpgradeSummaryButton` 을 Home(DashboardView), Profile(ProfileDetailView), Progress(ProgressView), Equipment(EquipmentTabView) 툴바에서 `ProfileSwitcherMenu()` 바로 앞(왼쪽)에 추가
+- 데이터: https://assets.clashk.ing/static_data.json 을 받아 캐시(24시간), 실패/누락 시 앱 내장 parsed_json_files 사용
+- 골드패스 %는 비용과 시간 모두에 적용, 진행 중 항목은 % + 남은 시간 표시
+- 섹션 순서: Heroes, Lab(Troops, Spells, Dark Troops, Sieges, Squads), Pets, Army, Defenses, Guardians, Resources, Crafted Def.
+- 공식 업데이트 후 확인: `ProgressCatalog`(항목/최대 레벨), `CoCExport`, `DataService.cachedTownHallLevels` 이름이 바뀌지 않았는지

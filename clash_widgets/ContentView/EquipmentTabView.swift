@@ -36,6 +36,9 @@ struct EquipmentView: View {
             .navigationTitle("Equipment")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
+                    UpgradeSummaryButton()
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
                     ProfileSwitcherMenu()
                 }
             }

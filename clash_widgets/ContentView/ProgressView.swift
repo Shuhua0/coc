@@ -353,6 +353,9 @@ struct ProgressTabView: View {
             ToolbarSpacer(placement: .navigationBarLeading)
         }
         ToolbarItem(placement: .navigationBarTrailing) {
+            UpgradeSummaryButton()
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             ProfileSwitcherMenu()
         }
     }
@@ -361,6 +364,7 @@ struct ProgressTabView: View {
     private var progressToolbarFallback: some ToolbarContent {
         ToolbarItem(placement: progressActionsPlacement) { reorderCardsButton }
         ToolbarItem(placement: progressActionsPlacement) { exportPreviewButton }
+        ToolbarItem(placement: .navigationBarTrailing) { UpgradeSummaryButton() }
         ToolbarItem(placement: .navigationBarTrailing) { ProfileSwitcherMenu() }
     }
 

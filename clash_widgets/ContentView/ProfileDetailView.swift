@@ -176,6 +176,9 @@ struct ProfileDetailView: View {
         }
         
         ToolbarItem(placement: .navigationBarTrailing) {
+            UpgradeSummaryButton()
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             ProfileSwitcherMenu()
         }
     }

@@ -660,6 +660,9 @@ struct DashboardView: View {
         ToolbarSpacer(placement: .navigationBarLeading)
 
         ToolbarItem(placement: .navigationBarTrailing) {
+            UpgradeSummaryButton()
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             ProfileSwitcherMenu()
         }
     }
@@ -706,6 +709,9 @@ struct DashboardView: View {
             .foregroundColor(.accentColor)
         }
 
+        ToolbarItem(placement: .navigationBarTrailing) {
+            UpgradeSummaryButton()
+        }
         ToolbarItem(placement: .navigationBarTrailing) {
             ProfileSwitcherMenu()
         }
