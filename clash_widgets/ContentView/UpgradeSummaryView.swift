@@ -717,6 +717,8 @@ enum UpgradeSummaryBuilder {
         static let multiArcherTower = 1000084
         static let ricochetCannon = 1000085
         static let firecrackerTower = 1000108
+        static let wizardTower = 1000011
+        static let superWizardTower = 1000102
     }
 
     private static func ownedBuildingCount(_ id: Int, export: CoCExport) -> Int {
@@ -743,6 +745,8 @@ enum UpgradeSummaryBuilder {
             missing -= 2 * ownedBuildingCount(MergeID.multiArcherTower, export: export)
             missing -= ownedBuildingCount(MergeID.multiGearTower, export: export)
             missing -= ownedBuildingCount(MergeID.firecrackerTower, export: export)
+        case MergeID.wizardTower:
+            missing -= 2 * ownedBuildingCount(MergeID.superWizardTower, export: export)
         case MergeID.scattershot:
             missing -= ownedBuildingCount(MergeID.firecrackerTower, export: export)
         default:
