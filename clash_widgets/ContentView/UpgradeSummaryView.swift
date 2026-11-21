@@ -557,7 +557,7 @@ enum UpgradeSummaryBuilder {
         let upgrades: [BuildingUpgrade]
         let townHallCounts: TownHallLevelCounts?
         let nameToId: [String: Int]
-        let includeUnbuilt: Bool
+        let showMaxed: Bool
     }
 
     private struct OwnedEntry {
@@ -646,8 +646,9 @@ enum UpgradeSummaryBuilder {
                     instances = standardInstances(section: section, item: item, entries: owned[item.id] ?? [],
                                                   context: context, pool: &pool)
                 }
-                if instances.isEmpty { continue }
-                items.append(UpgradeItemModel(id: "\(section.id)-\(item.id)", name: koName(item.name), instances: instances))
+                let visible = context.showMaxed ? instances : instances.filter { !$0.isMaxed }
+                if visible.isEmpty { continue }
+                items.append(UpgradeItemModel(id: "\(section.id)-\(item.id)", name: koName(item.name), instances: visible))
             }
         }
         return items
@@ -706,6 +707,50 @@ enum UpgradeSummaryBuilder {
         return total
     }
 
+    // 합체 건물 (합체하면 재료 건물이 사라지므로 미건설 칸에서 뺀다)
+    private enum MergeID {
+        static let cannon = 1000008
+        static let archerTower = 1000009
+        static let eagleArtillery = 1000031
+        static let scattershot = 1000067
+        static let multiGearTower = 1000079
+        static let multiArcherTower = 1000084
+        static let ricochetCannon = 1000085
+        static let firecrackerTower = 1000108
+    }
+
+    private static func ownedBuildingCount(_ id: Int, export: CoCExport) -> Int {
+        var total = 0
+        for building in export.buildings ?? [] where building.data == id && building.lvl != nil {
+            total += max(building.cnt ?? 1, 1)
+        }
+        return total
+    }
+
+    /// 미건설로 보여줄 칸 수 (합체 건물 규칙 반영)
+    private static func missingCount(for itemID: Int, ownedHere: Int, context: Context) -> Int {
+        var missing = max(requiredCount(for: itemID, context: context) - ownedHere, 0)
+        let export = context.export
+
+        switch itemID {
+        case MergeID.eagleArtillery:
+            // 마을회관 17 이상: 독수리 타워는 미건설이면 숨김
+            if context.townHall >= 17 { missing = 0 }
+        case MergeID.cannon:
+            missing -= 2 * ownedBuildingCount(MergeID.ricochetCannon, export: export)
+            missing -= ownedBuildingCount(MergeID.multiGearTower, export: export)
+        case MergeID.archerTower:
+            missing -= 2 * ownedBuildingCount(MergeID.multiArcherTower, export: export)
+            missing -= ownedBuildingCount(MergeID.multiGearTower, export: export)
+            missing -= ownedBuildingCount(MergeID.firecrackerTower, export: export)
+        case MergeID.scattershot:
+            missing -= ownedBuildingCount(MergeID.firecrackerTower, export: export)
+        default:
+            break
+        }
+        return max(missing, 0)
+    }
+
     // MARK: 일반 항목 (영웅/연구소/펫/건물 등)
 
     private static func standardInstances(section: ProgressCatalog.Section, item: ProgressCatalog.Item,
@@ -724,8 +769,8 @@ enum UpgradeSummaryBuilder {
                 context: context, pool: &pool))
         }
 
-        if isBuilding && cap > 0 && context.includeUnbuilt {
-            let missing = max(requiredCount(for: item.id, context: context) - entries.count, 0)
+        if isBuilding && cap > 0 {
+            let missing = missingCount(for: item.id, ownedHere: entries.count, context: context)
             if missing > 0 {
                 for index in 0..<missing {
                     instances.append(makeInstance(
@@ -826,7 +871,7 @@ struct UpgradeSummaryScreen: View {
 
     @AppStorage("upgradeSectionOrder") private var storedOrder = ""
     @AppStorage("upgradeHiddenSections") private var storedHidden = ""
-    @AppStorage("upgradeShowUnbuilt") private var showUnbuilt = true
+    @AppStorage("upgradeShowMaxed") private var showMaxed = true
 
     @State private var sections: [UpgradeSectionModel] = []
     @State private var isLoading = true
@@ -839,7 +884,7 @@ struct UpgradeSummaryScreen: View {
         let goldPass: Int
         let revision: Int
         let upgradeCount: Int
-        let showUnbuilt: Bool
+        let showMaxed: Bool
     }
 
     private var reloadKey: ReloadKey {
@@ -849,7 +894,7 @@ struct UpgradeSummaryScreen: View {
             goldPass: dataService.goldPassBoost,
             revision: store.revision,
             upgradeCount: dataService.currentProfile?.activeUpgrades.count ?? 0,
-            showUnbuilt: showUnbuilt
+            showMaxed: showMaxed
         )
     }
 
@@ -919,7 +964,7 @@ struct UpgradeSummaryScreen: View {
                 }
             }
             .sheet(isPresented: $showEditSheet) {
-                UpgradeCardsEditSheet(order: orderBinding, hidden: hiddenBinding, showUnbuilt: $showUnbuilt)
+                UpgradeCardsEditSheet(order: orderBinding, hidden: hiddenBinding, showMaxed: $showMaxed)
             }
             .task(id: reloadKey) {
                 await rebuild()
@@ -1053,7 +1098,7 @@ struct UpgradeSummaryScreen: View {
             upgrades: dataService.currentProfile?.activeUpgrades ?? dataService.activeUpgrades,
             townHallCounts: counts,
             nameToId: dataService.cachedBuildingNameToId ?? [:],
-            includeUnbuilt: showUnbuilt
+            showMaxed: showMaxed
         )
         sections = UpgradeSummaryBuilder.build(context: context)
         isLoading = false
@@ -1160,7 +1205,7 @@ private struct UpgradeInstanceRow: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.top, 3)
+        .padding(.top, 9)
         .padding(.bottom, 9)
         .frame(maxWidth: .infinity)
     }
@@ -1348,12 +1393,12 @@ enum UpgradeGoldPass {
     }
 }
 
-// MARK: - Edit Upgrades Cards (섹션 on/off, 순서, 미건설 표시)
+// MARK: - Edit Upgrades Cards (섹션 on/off, 순서, 최대 레벨 표시)
 
 private struct UpgradeCardsEditSheet: View {
     @Binding var order: [String]
     @Binding var hidden: Set<String>
-    @Binding var showUnbuilt: Bool
+    @Binding var showMaxed: Bool
     @Environment(\.dismiss) private var dismiss
 
     private func title(for id: String) -> String {
@@ -1386,16 +1431,16 @@ private struct UpgradeCardsEditSheet: View {
                 }
 
                 Section {
-                    Toggle("Show Unbuilt Buildings", isOn: $showUnbuilt)
+                    Toggle("Show Max Level", isOn: $showMaxed)
                 } footer: {
-                    Text("Turn off to hide buildings you haven't built yet (for example, buildings that merge into another one).")
+                    Text("Turn off to hide items that are already at max level.")
                 }
 
                 Section {
                     Button("Reset to Default") {
                         order = UpgradeSummaryBuilder.sectionList.map { $0.id }
                         hidden.removeAll()
-                        showUnbuilt = true
+                        showMaxed = true
                     }
                     .frame(maxWidth: .infinity)
                 }

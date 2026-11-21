@@ -34,6 +34,7 @@
 - 골드패스 %는 비용과 시간 모두에 적용, 진행 중 항목은 % + 남은 시간 표시
 - 섹션 순서: Heroes, Lab(Troops, Spells, Dark Troops, Sieges, Squads), Pets, Army, Defenses, Guardians, Resources, Crafted Def.
 - 공식 업데이트 후 확인: `ProgressCatalog`(항목/최대 레벨), `CoCExport`, `DataService.cachedTownHallLevels` 이름이 바뀌지 않았는지
-- 화면 제목은 "Upgrades". 왼쪽 위 닫기 버튼 옆의 편집 버튼(Edit Upgrades Cards)으로 섹션 on/off·순서·미건설 건물 표시 on/off 설정 (AppStorage: upgradeSectionOrder, upgradeHiddenSections, upgradeShowUnbuilt)
+- 화면 제목은 "Upgrades". 왼쪽 위 닫기 버튼 옆의 편집 버튼(Edit Upgrades Cards)으로 섹션 on/off·순서·최대 레벨 표시 on/off 설정 (AppStorage: upgradeSectionOrder, upgradeHiddenSections, upgradeShowMaxed)
 - 상단 골드패스 줄: "골드패스 N% 적용 (남은시간)" (Profile 화면과 같은 초기화 시각 사용)
 - (cocV29) Upgrades 화면: 같은 항목의 줄 배경을 검정/회색 반복 -> 한 가지 색(secondarySystemBackground)으로 통일, 이미지+레벨(x/y) 아래 여백 3 -> 9 (`UpgradeInstanceRow`)
+- (cocV30) Upgrades 화면: Show Unbuilt Buildings 토글 삭제(미건설은 항상 표시) -> Show Max Level 토글로 교체. 합체 건물 규칙(`UpgradeSummaryBuilder.missingCount`): TH17+ 독수리 타워 미건설 숨김 / 리코셰 대포 1개당 대포 2 / 멀티 아처 타워 1개당 아처 타워 2 / 멀티 개조 타워 1개당 대포 1+아처 타워 1 / 로켓병 타워(Firecracker Tower) 1개당 아처 타워 1+투석기(Scattershot) 1 미건설 제외. 이미지 위/아래 여백 9
