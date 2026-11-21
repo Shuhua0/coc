@@ -557,6 +557,7 @@ enum UpgradeSummaryBuilder {
         let upgrades: [BuildingUpgrade]
         let townHallCounts: TownHallLevelCounts?
         let nameToId: [String: Int]
+        let includeUnbuilt: Bool
     }
 
     private struct OwnedEntry {
@@ -607,6 +608,10 @@ enum UpgradeSummaryBuilder {
             SubsectionSpec(title: nil, catalogID: "crafted_defenses", groupID: nil)
         ])
     ]
+
+    static var sectionList: [(id: String, title: String)] {
+        specs.map { (id: $0.id, title: $0.title) }
+    }
 
     static func build(context: Context) -> [UpgradeSectionModel] {
         var pool = context.upgrades
@@ -719,7 +724,7 @@ enum UpgradeSummaryBuilder {
                 context: context, pool: &pool))
         }
 
-        if isBuilding && cap > 0 {
+        if isBuilding && cap > 0 && context.includeUnbuilt {
             let missing = max(requiredCount(for: item.id, context: context) - entries.count, 0)
             if missing > 0 {
                 for index in 0..<missing {
@@ -819,9 +824,14 @@ struct UpgradeSummaryScreen: View {
     @EnvironmentObject private var dataService: DataService
     @ObservedObject private var store = UpgradeStaticDataStore.shared
 
+    @AppStorage("upgradeSectionOrder") private var storedOrder = ""
+    @AppStorage("upgradeHiddenSections") private var storedHidden = ""
+    @AppStorage("upgradeShowUnbuilt") private var showUnbuilt = true
+
     @State private var sections: [UpgradeSectionModel] = []
     @State private var isLoading = true
     @State private var hasExport = true
+    @State private var showEditSheet = false
 
     private struct ReloadKey: Hashable {
         let profileID: UUID?
@@ -829,6 +839,7 @@ struct UpgradeSummaryScreen: View {
         let goldPass: Int
         let revision: Int
         let upgradeCount: Int
+        let showUnbuilt: Bool
     }
 
     private var reloadKey: ReloadKey {
@@ -837,7 +848,8 @@ struct UpgradeSummaryScreen: View {
             importDate: dataService.currentProfile?.lastImportDate,
             goldPass: dataService.goldPassBoost,
             revision: store.revision,
-            upgradeCount: dataService.currentProfile?.activeUpgrades.count ?? 0
+            upgradeCount: dataService.currentProfile?.activeUpgrades.count ?? 0,
+            showUnbuilt: showUnbuilt
         )
     }
 
@@ -857,7 +869,7 @@ struct UpgradeSummaryScreen: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                     } else {
-                        ForEach(sections) { section in
+                        ForEach(visibleSections) { section in
                             UpgradeSectionCard(section: section)
                         }
                         dataSourceFooter
@@ -881,6 +893,16 @@ struct UpgradeSummaryScreen: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showEditSheet = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Edit Upgrades Cards")
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         Task { await store.refreshIfNeeded(force: true) }
@@ -896,6 +918,9 @@ struct UpgradeSummaryScreen: View {
                     ProfileSwitcherMenu()
                 }
             }
+            .sheet(isPresented: $showEditSheet) {
+                UpgradeCardsEditSheet(order: orderBinding, hidden: hiddenBinding, showUnbuilt: $showUnbuilt)
+            }
             .task(id: reloadKey) {
                 await rebuild()
             }
@@ -903,6 +928,49 @@ struct UpgradeSummaryScreen: View {
                 await store.refreshIfNeeded()
             }
         }
+    }
+
+    // MARK: 카드 순서 / 숨김
+
+    private var resolvedOrder: [String] {
+        let defaults = UpgradeSummaryBuilder.sectionList.map { $0.id }
+        var result: [String] = []
+        for id in storedOrder.split(separator: ",").map(String.init) where defaults.contains(id) && !result.contains(id) {
+            result.append(id)
+        }
+        for id in defaults where !result.contains(id) {
+            result.append(id)
+        }
+        return result
+    }
+
+    private var hiddenSet: Set<String> {
+        Set(storedHidden.split(separator: ",").map(String.init))
+    }
+
+    private var orderBinding: Binding<[String]> {
+        Binding(
+            get: { resolvedOrder },
+            set: { storedOrder = $0.joined(separator: ",") }
+        )
+    }
+
+    private var hiddenBinding: Binding<Set<String>> {
+        Binding(
+            get: { hiddenSet },
+            set: { storedHidden = $0.sorted().joined(separator: ",") }
+        )
+    }
+
+    private var visibleSections: [UpgradeSectionModel] {
+        let hidden = hiddenSet
+        var result: [UpgradeSectionModel] = []
+        for id in resolvedOrder where !hidden.contains(id) {
+            if let section = sections.first(where: { $0.id == id }) {
+                result.append(section)
+            }
+        }
+        return result
     }
 
     // MARK: 위쪽 요약
@@ -917,9 +985,17 @@ struct UpgradeSummaryScreen: View {
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(profileName).font(.subheadline.weight(.semibold))
-                Text(goldPass == 0 ? "골드패스 없음" : "골드패스 \(goldPass)% 적용 (비용·시간)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if goldPass == 0 {
+                    Text("골드패스 없음")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    TimelineView(.periodic(from: .now, by: 60.0)) { timeline in
+                        Text("골드패스 \(goldPass)% 적용 (\(UpgradeGoldPass.remainingText(from: timeline.date)))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
             Spacer(minLength: 0)
         }
@@ -976,7 +1052,8 @@ struct UpgradeSummaryScreen: View {
             store: store,
             upgrades: dataService.currentProfile?.activeUpgrades ?? dataService.activeUpgrades,
             townHallCounts: counts,
-            nameToId: dataService.cachedBuildingNameToId ?? [:]
+            nameToId: dataService.cachedBuildingNameToId ?? [:],
+            includeUnbuilt: showUnbuilt
         )
         sections = UpgradeSummaryBuilder.build(context: context)
         isLoading = false
@@ -1030,9 +1107,9 @@ private struct UpgradeItemCard: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(item.name)
-                .font(.subheadline.weight(.semibold))
+                .font(.footnote.weight(.semibold))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 5)
                 .background(Color(.systemFill))
 
             ForEach(Array(item.instances.enumerated()), id: \.element.id) { index, instance in
@@ -1054,7 +1131,7 @@ private struct UpgradeInstanceRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
             leftBlock
-                .frame(width: 100)
+                .frame(width: 88)
             Rectangle().fill(Color(.separator)).frame(width: 1)
             rightBlock
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1063,15 +1140,15 @@ private struct UpgradeInstanceRow: View {
     }
 
     private var leftBlock: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 1) {
             Image(instance.imageName)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 48, height: 48)
+                .frame(width: 38, height: 38)
                 .saturation(instance.isMissing ? 0 : 1)
                 .opacity(instance.isMissing ? 0.45 : 1)
             Text("\(instance.current)/\(instance.cap)")
-                .font(.system(size: 15, weight: .medium).monospacedDigit())
+                .font(.system(size: 13, weight: .medium).monospacedDigit())
             if let label = instance.label {
                 Text(label)
                     .font(.caption2)
@@ -1083,22 +1160,23 @@ private struct UpgradeInstanceRow: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.top, 3)
+        .padding(.bottom, 3)
         .frame(maxWidth: .infinity)
     }
 
     private var rightBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             if let progress = instance.progress {
                 UpgradeProgressHeader(progress: progress)
             }
             if instance.isMaxed {
                 Text("최대 레벨")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(.green)
                     .frame(maxWidth: .infinity, alignment: .center)
             } else if !instance.lines.isEmpty {
-                VStack(spacing: 4) {
+                VStack(spacing: 1) {
                     ForEach(instance.lines) { line in
                         UpgradeLevelLineRow(line: line)
                     }
@@ -1106,7 +1184,8 @@ private struct UpgradeInstanceRow: View {
                 UpgradeInstanceTotalBar(totals: instance.totals)
             }
         }
-        .padding(10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
     }
 }
 
@@ -1115,7 +1194,7 @@ private struct UpgradeProgressHeader: View {
 
     var body: some View {
         let percent = Int((progress.fraction * 100).rounded(.down))
-        return VStack(spacing: 6) {
+        return VStack(spacing: 4) {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color(.systemFill))
                 GeometryReader { proxy in
@@ -1127,13 +1206,13 @@ private struct UpgradeProgressHeader: View {
                     .font(.caption.bold())
                     .padding(.leading, 8)
             }
-            .frame(height: 22)
+            .frame(height: 18)
 
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up")
                     .font(.caption.bold())
                 Text("\(progress.targetLevel) - \(UpgradeFormat.remaining(progress.remaining))")
-                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
             }
             .frame(maxWidth: .infinity)
 
@@ -1149,15 +1228,15 @@ private struct UpgradeLevelLineRow: View {
         HStack(spacing: 4) {
             Text("Lv \(line.level):")
                 .foregroundColor(.secondary)
-                .frame(width: 52, alignment: .leading)
+                .frame(width: 46, alignment: .leading)
             Text(line.cost.map { UpgradeFormat.cost($0) } ?? "—")
                 .fontWeight(.bold)
                 .foregroundColor(line.resource.color)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Text(line.seconds.map { UpgradeFormat.duration($0) } ?? "—")
-                .frame(width: 74, alignment: .trailing)
+                .frame(width: 64, alignment: .trailing)
         }
-        .font(.system(size: 14).monospacedDigit())
+        .font(.system(size: 12).monospacedDigit())
         .lineLimit(1)
         .minimumScaleFactor(0.8)
     }
@@ -1179,11 +1258,11 @@ private struct UpgradeInstanceTotalBar: View {
             Text("-")
             Text(UpgradeFormat.duration(totals.seconds))
         }
-        .font(.system(size: 13).monospacedDigit())
+        .font(.system(size: 11.5).monospacedDigit())
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .background(Color(.systemFill), in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -1222,5 +1301,112 @@ private struct UpgradeTotalsBar: View {
         }
         .padding(emphasized ? 12 : 8)
         .background(Color(.systemFill), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+
+// MARK: - 골드패스 남은 시간 (Profile 화면과 동일: 매월 1일 08:00 GMT 초기화)
+
+enum UpgradeGoldPass {
+    static func remainingText(from date: Date) -> String {
+        let diff = Int(nextResetDate(for: date).timeIntervalSince(date))
+        if diff <= 0 { return "Resetting..." }
+
+        let days = diff / 86400
+        let hours = (diff % 86400) / 3600
+        let minutes = (diff % 3600) / 60
+        let seconds = diff % 60
+
+        if days > 0 {
+            return "\(days)d \(hours)h"
+        } else if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m \(seconds)s"
+        }
+    }
+
+    private static func nextResetDate(for date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let components = calendar.dateComponents([.year, .month], from: date)
+
+        var resetComponents = DateComponents()
+        resetComponents.year = components.year
+        resetComponents.month = components.month
+        resetComponents.day = 1
+        resetComponents.hour = 8
+        resetComponents.minute = 0
+        resetComponents.second = 0
+
+        let resetThisMonth = calendar.date(from: resetComponents) ?? date
+        if date < resetThisMonth {
+            return resetThisMonth
+        } else {
+            return calendar.date(byAdding: .month, value: 1, to: resetThisMonth) ?? resetThisMonth
+        }
+    }
+}
+
+// MARK: - Edit Upgrades Cards (섹션 on/off, 순서, 미건설 표시)
+
+private struct UpgradeCardsEditSheet: View {
+    @Binding var order: [String]
+    @Binding var hidden: Set<String>
+    @Binding var showUnbuilt: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    private func title(for id: String) -> String {
+        UpgradeSummaryBuilder.sectionList.first(where: { $0.id == id })?.title ?? id
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Visible Cards") {
+                    ForEach(order, id: \.self) { id in
+                        HStack {
+                            Text(title(for: id))
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { !hidden.contains(id) },
+                                set: { isVisible in
+                                    if isVisible {
+                                        hidden.remove(id)
+                                    } else {
+                                        hidden.insert(id)
+                                    }
+                                }
+                            ))
+                        }
+                    }
+                    .onMove { offsets, destination in
+                        order.move(fromOffsets: offsets, toOffset: destination)
+                    }
+                }
+
+                Section {
+                    Toggle("Show Unbuilt Buildings", isOn: $showUnbuilt)
+                } footer: {
+                    Text("Turn off to hide buildings you haven't built yet (for example, buildings that merge into another one).")
+                }
+
+                Section {
+                    Button("Reset to Default") {
+                        order = UpgradeSummaryBuilder.sectionList.map { $0.id }
+                        hidden.removeAll()
+                        showUnbuilt = true
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Edit Upgrades Cards")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
