@@ -984,15 +984,15 @@ struct UpgradeSummaryScreen: View {
                 .scaledToFit()
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(profileName).font(.system(size: 16, weight: .semibold))
+                Text(profileName).font(.subheadline.weight(.semibold))
                 if goldPass == 0 {
                     Text("골드패스 없음")
-                        .font(.system(size: 13))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 } else {
                     TimelineView(.periodic(from: .now, by: 60.0)) { timeline in
-                        Text("골드패스 \(goldPass)% (\(UpgradeGoldPass.remainingText(from: timeline.date)))")
-                            .font(.system(size: 13))
+                        Text("골드패스 \(goldPass)% 적용 (\(UpgradeGoldPass.remainingText(from: timeline.date)))")
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -1066,7 +1066,8 @@ private extension View {
     func upgradeCardStyle() -> some View {
         self.frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemGroupedBackground)))
+            .background(RoundedRectangle(cornerRadius: 20).fill(Color(.tertiarySystemBackground)))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(.separator).opacity(0.6), lineWidth: 1))
     }
 }
 
@@ -1077,7 +1078,6 @@ private struct UpgradeSectionCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(section.title)
                 .font(.title3.bold())
-                .padding(.horizontal, 4)
 
             ForEach(section.subsections) { subsection in
                 VStack(alignment: .leading, spacing: 10) {
@@ -1085,7 +1085,6 @@ private struct UpgradeSectionCard: View {
                         Text(title)
                             .font(.subheadline.bold())
                             .padding(.top, 4)
-                            .padding(.horizontal, 4)
                     }
                     ForEach(subsection.items) { item in
                         UpgradeItemCard(item: item)
@@ -1098,7 +1097,7 @@ private struct UpgradeSectionCard: View {
 
             UpgradeTotalsBar(title: "\(section.title) 총 시간", totals: section.totals, emphasized: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .upgradeCardStyle()
     }
 }
 
@@ -1107,32 +1106,37 @@ private struct UpgradeItemCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text(item.name)
+                .font(.footnote.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background(Color(.systemFill))
+
             ForEach(Array(item.instances.enumerated()), id: \.element.id) { index, instance in
                 if index > 0 {
-                    Rectangle()
-                        .fill(Color(.separator))
-                        .frame(height: 0.5)
-                        .padding(.horizontal, 12)
+                    Rectangle().fill(Color(.separator)).frame(height: 1)
                 }
-                UpgradeInstanceRow(instance: instance, title: index == 0 ? item.name : nil)
+                UpgradeInstanceRow(instance: instance, shaded: index % 2 == 0)
             }
         }
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(.separator), lineWidth: 1))
     }
 }
 
 private struct UpgradeInstanceRow: View {
     let instance: UpgradeInstanceModel
-    let title: String?
+    let shaded: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
             leftBlock
                 .frame(width: 88)
+            Rectangle().fill(Color(.separator)).frame(width: 1)
             rightBlock
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(Color(.secondarySystemBackground))
     }
 
     private var leftBlock: some View {
@@ -1157,17 +1161,12 @@ private struct UpgradeInstanceRow: View {
             }
         }
         .padding(.top, 3)
-        .padding(.bottom, 3)
+        .padding(.bottom, 9)
         .frame(maxWidth: .infinity)
     }
 
     private var rightBlock: some View {
         VStack(alignment: .leading, spacing: 5) {
-            if let title = title {
-                Text(title)
-                    .font(.footnote.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
             if let progress = instance.progress {
                 UpgradeProgressHeader(progress: progress)
             }
@@ -1185,9 +1184,8 @@ private struct UpgradeInstanceRow: View {
                 UpgradeInstanceTotalBar(totals: instance.totals)
             }
         }
-        .padding(.leading, 4)
-        .padding(.trailing, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
     }
 }
 
@@ -1197,7 +1195,7 @@ private struct UpgradeProgressHeader: View {
     var body: some View {
         let percent = Int((progress.fraction * 100).rounded(.down))
         return VStack(spacing: 4) {
-            ZStack {
+            ZStack(alignment: .leading) {
                 Capsule().fill(Color(.systemFill))
                 GeometryReader { proxy in
                     Capsule()
@@ -1206,6 +1204,7 @@ private struct UpgradeProgressHeader: View {
                 }
                 Text("\(percent)%")
                     .font(.caption.bold())
+                    .padding(.leading, 8)
             }
             .frame(height: 18)
 
@@ -1264,7 +1263,7 @@ private struct UpgradeInstanceTotalBar: View {
         .minimumScaleFactor(0.75)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
-        .background(Color(.tertiarySystemGroupedBackground), in: Capsule())
+        .background(Color(.systemFill), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -1301,7 +1300,7 @@ private struct UpgradeTotalsBar: View {
             }
         }
         .padding(emphasized ? 12 : 8)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color(.systemFill), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
