@@ -35,4 +35,9 @@
 - 섹션 순서: Heroes, Lab(Troops, Spells, Dark Troops, Sieges, Squads), Pets, Army, Defenses, Guardians, Resources, Crafted Def.
 - 공식 업데이트 후 확인: `ProgressCatalog`(항목/최대 레벨), `CoCExport`, `DataService.cachedTownHallLevels` 이름이 바뀌지 않았는지
 - 화면 제목은 "Upgrades". 왼쪽 위 닫기 버튼 옆의 편집 버튼(Edit Upgrades Cards)으로 섹션 on/off·순서·미건설 건물 표시 on/off 설정 (AppStorage: upgradeSectionOrder, upgradeHiddenSections, upgradeShowUnbuilt)
-- 상단 골드패스 줄: "골드패스 N% 적용 (남은시간)" (Profile 화면과 같은 초기화 시각 사용)
+- 상단 골드패스 줄: "골드패스 N% (남은시간)" (Profile 화면과 같은 초기화 시각 사용), 프로필 이름 16pt / 골드패스 문구 13pt
+
+## 6. 업그레이드 화면 디자인 (cocV29)
+- iOS 기본 다크 회색 계열 셀, 건물 카드의 제목 바 제거(이름은 첫 줄 오른쪽 위), 줄무늬·외곽선 제거, 같은 건물은 한 카드 안에 묶음
+- 진행 중 항목은 알약 로딩바 가운데에 % 표시
+- 수정 위치: UpgradeSummaryView.swift 의 UpgradeItemCard / UpgradeInstanceRow / UpgradeProgressHeader / upgradeCardStyle
