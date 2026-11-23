@@ -40,3 +40,4 @@
 - (cocV30) Upgrades 화면: Show Unbuilt Buildings 토글 삭제(미건설은 항상 표시) -> Show Max Level 토글로 교체. 합체 건물 규칙(`UpgradeSummaryBuilder.missingCount`): TH17+ 독수리 타워 미건설 숨김 / 리코셰 대포 1개당 대포 2 / 멀티 아처 타워 1개당 아처 타워 2 / 멀티 개조 타워 1개당 대포 1+아처 타워 1 / 로켓병 타워(Firecracker Tower) 1개당 아처 타워 1+투석기(Scattershot) 1 미건설 제외 / 슈퍼 마법사 타워 1개당 마법사 타워 2 미건설 제외. 이미지 위/아래 여백 9
 - (cocV33) 프로필 버튼(`ProfileSwitcherMenu`): 탭하면 다음 프로필로 순환 전환, 꾹 누르면 기존 프로필 목록 메뉴. 아이콘 색은 현재 프로필 순서 기준 1번 금색/2번 은색/3번 이후 구리색 (다크·라이트 모드별 색 따로 지정)
 - (cocV34) 프로필 버튼 색: 1번 금색(#FFD23F) / 2번 회청색 은색(#A9B2BF) / 3번 이후 구리색(#E58A4A) (다크 모드 기준, 라이트 모드는 더 진한 색). 홈 탭 업그레이드 줄(`BuilderRow`): 왼쪽 묶음(이미지·Lv·기간) 폭을 68로 고정해 진행 막대 시작점 통일 (위젯은 미적용)
+- (cocV35) 이미지 용량 정리: 마을 회관 th13·th18(4096px, 합 23MB)과 펫 sneezy(1200px)의 투명 여백을 잘라내고 비율 유지한 채 축소 (th13/th18 긴 변 640px, sneezy 300px). 다른 이미지(배경·changelog·AppIcon 등)는 그대로
