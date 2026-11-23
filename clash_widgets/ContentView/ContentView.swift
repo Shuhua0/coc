@@ -823,15 +823,15 @@ struct ProfileSwitcherMenu: View {
         switch index {
         case 0:
             return Color(UIColor { $0.userInterfaceStyle == .dark
-                ? UIColor(red: 1.00, green: 0.82, blue: 0.25, alpha: 1)
+                ? UIColor(red: 1.000, green: 0.824, blue: 0.247, alpha: 1)
                 : UIColor(red: 0.80, green: 0.58, blue: 0.00, alpha: 1) })
         case 1:
             return Color(UIColor { $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1)
+                ? UIColor(red: 0.663, green: 0.698, blue: 0.749, alpha: 1)
                 : UIColor(red: 0.50, green: 0.54, blue: 0.60, alpha: 1) })
         default:
             return Color(UIColor { $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.90, green: 0.55, blue: 0.30, alpha: 1)
+                ? UIColor(red: 0.898, green: 0.541, blue: 0.290, alpha: 1)
                 : UIColor(red: 0.68, green: 0.38, blue: 0.15, alpha: 1) })
         }
     }

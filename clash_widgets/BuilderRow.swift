@@ -61,8 +61,12 @@ struct BuilderRow: View {
                 Text(upgrade.levelDisplayText)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 upgradeDurationLabel
             }
+            // 레벨 숫자 자릿수와 상관없이 왼쪽 폭을 고정해 진행 막대 시작점을 맞춤
+            .frame(width: 68)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
