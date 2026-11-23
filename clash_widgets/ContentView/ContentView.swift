@@ -812,6 +812,39 @@ struct ProfileSwitcherMenu: View {
         self.iconFont = iconFont
     }
 
+    // 현재 선택된 프로필이 목록에서 몇 번째인지 (0부터 시작, 못 찾으면 nil)
+    private var selectedIndex: Int? {
+        dataService.profiles.firstIndex { $0.id == dataService.selectedProfileID }
+    }
+
+    // 1번 금색, 2번 은색, 3번 이후 구리색 (다크/라이트 모드 모두에서 잘 보이도록 따로 지정)
+    private var iconColor: Color {
+        guard let index = selectedIndex else { return .accentColor }
+        switch index {
+        case 0:
+            return Color(UIColor { $0.userInterfaceStyle == .dark
+                ? UIColor(red: 1.00, green: 0.82, blue: 0.25, alpha: 1)
+                : UIColor(red: 0.80, green: 0.58, blue: 0.00, alpha: 1) })
+        case 1:
+            return Color(UIColor { $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1)
+                : UIColor(red: 0.50, green: 0.54, blue: 0.60, alpha: 1) })
+        default:
+            return Color(UIColor { $0.userInterfaceStyle == .dark
+                ? UIColor(red: 0.90, green: 0.55, blue: 0.30, alpha: 1)
+                : UIColor(red: 0.68, green: 0.38, blue: 0.15, alpha: 1) })
+        }
+    }
+
+    // 탭하면 다음 프로필로 (마지막이면 처음으로)
+    private func selectNextProfile() {
+        let profiles = dataService.profiles
+        guard profiles.count > 1 else { return }
+        let current = selectedIndex ?? -1
+        let next = (current + 1) % profiles.count
+        dataService.selectProfile(profiles[next].id)
+    }
+
     var body: some View {
         Menu {
             ForEach(dataService.profiles) { profile in
@@ -824,7 +857,9 @@ struct ProfileSwitcherMenu: View {
         } label: {
             Image(systemName: iconName)
                 .font(iconFont)
-                .foregroundColor(.accentColor)
+                .foregroundColor(iconColor)
+        } primaryAction: {
+            selectNextProfile()
         }
     }
 }
